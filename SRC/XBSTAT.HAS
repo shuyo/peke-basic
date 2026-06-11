@@ -3580,7 +3580,7 @@ did_cont:
 	bcs	dim_mis
 
 	cmp.w	d1,d2
-	bhi	dim_mis
+	bcc	dim_mis
 	move.w	d2,(a3)		* ‰Šú‰»ƒf[ƒ^‚ÌŒÂ”
 
 	move.l	a4,d0
