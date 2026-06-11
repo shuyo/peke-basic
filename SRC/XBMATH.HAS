@@ -627,6 +627,8 @@ Not:
 	movea.l	(a4),a0
 	move.w	d0,(a0)+	* 式（演算子）
 	move.l	a0,(a4)
+	bsr	解釈work検査	* 単項の連鎖で式領域があふれないように
+	bra	解釈		* 単項演算子の連続 (not -a, -not a 等) を許す
 
 
 
