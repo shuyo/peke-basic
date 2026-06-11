@@ -2148,6 +2148,9 @@ func_next:
 
 
 内部関数登録:
+	movem.l	d1-d2/a5,-(sp)	* エラー時の行数表示用に事前算出
+	bsr	line算出
+	movem.l	(sp)+,d1-d2/a5
 	addq.l	#1,a5
  * 型を得る（省略なら int )
 	bsr	型getS
