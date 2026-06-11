@@ -1,0 +1,5 @@
+*.BAS -text
+*.HAS -text
+*.H -text
+*.R -text
+*.FNC -text

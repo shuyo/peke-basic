@@ -1,0 +1,1008 @@
+
+	.include	doscall.mac
+	.include	fefunc.h
+	.include	fdef.h
+
+
+BUF_SIZE	.equ	$1000
+
+
+	.offset		0
+bit_work:	.ds.l	1	* 必要
+
+FP:		.ds.w	1
+STP:		.ds.l	1
+_dis:		.ds.l	1
+_filesize:	.ds.l	1
+
+EXT_BUF:	.ds.l	1
+left_area:	.ds.l	1	* 配列サイズ
+
+
+_header:		.ds.b	1
+lzhID:			.ds.b	5	* '-lh?-'
+src_filesize:		.ds.l	1
+ext_filesize:		.ds.l	1
+datetime:		.ds.l	1	* 日付＆時間
+attribute:		.ds.b	2	* $20,$01
+ext_filename_size:	.ds.b	1
+ext_filename:		.ds.b	128
+			.even
+
+
+FileBuf:
+_direct:		.ds.b	256	* 兼用
+_filename:		.ds.b	256	* ワーク
+
+	***	table	***
+M0ca2:		.ds.b	2038
+M1498:		.ds.b	2038
+
+
+M1c8e:		.ds.w	$1000
+M3c8e:		.ds.w	$100
+
+M3e8e:		.ds.b	510	* 数値を表わすのに何ビット必要か (ハフマン)
+M408c:		.ds.b	128		*.ds.b	128+4
+
+M4192:		.ds.w	1
+M4194:		.ds.w	17	*
+M41b6:		.ds.w	17	*
+M41d8:		.ds.w	17	*
+
+
+buf2:		.ds.b	BUF_SIZE
+
+		.ds.b	$10		* きもち
+		.even
+WORK_SIZE:
+
+
+
+
+
+
+	.text
+	.even
+
+	.dc.l	ret
+	.dc.l	ret
+	.dc.l	ret
+	.dc.l	ret
+	.dc.l	ret
+	.dc.l	ret
+	.dc.l	ret
+	.dc.l	ret
+	.dc.l	ptr_token
+	.dc.l	ptr_param
+	.dc.l	ptr_exec
+	.dc.l	0,0,0,0,0
+
+ret:
+	rts
+ptr_token:
+	.dc.b	'lzh_extend',0
+	.dc.b	0
+	.even
+ptr_param:
+	.dc.l	p_lzh_extend
+ptr_exec:
+	.dc.l	e_lzh_extend
+
+
+p_lzh_extend:
+	.dc.w	str_val
+	.dc.w	$0077		* int,char,float 型 1,2 次元配列  ras(n,d)
+	.dc.w	int_ret
+
+
+e_lzh_extend:
+	lea.l	WORK_adr,a6
+
+	movea.l	par1+6(sp),a0	* file name
+	clr.w	-(sp)
+	move.l	a0,-(sp)
+	DOS	_OPEN
+	addq.l	#6,sp
+	move.w	d0,FP(a6)
+	bmi	file_cant_open
+
+	movea.l	par2+6(sp),a1		* 展開先の配列
+	move.w	4(a1),d3	* 次元 -1
+	move.w	d3,d0
+	add.w	d0,d0
+	add.w	d3,d0
+	add.w	d0,d0	* 6n-6
+	lea.l	4+6(a1,d0.w),a0
+	move.l	a0,EXT_BUF(a6)		* 展開先のアドレス
+
+	moveq	#0,d0
+	lea.l	6(a1),a0	* 各項のサイズ＋添字大きさ先頭
+	move.w	(a0)+,d0
+@@:
+		moveq	#0,d1
+		move.w	(a0)+,d1
+		addq.l	#1,d1
+		FPACK	__UMUL
+	dbra	d3,@b
+	move.l	d0,left_area(a6)	* 展開先の大きさ
+
+
+	lea.l	_header(a6),a3
+
+	move.w	FP(a6),-(sp)
+	DOS	_FGETC
+	addq.l	#2,sp
+	move.l	d0,d4		* header size
+	beq	not_lzh_file
+	addq.w	#1,d4
+
+	move.l	d4,-(sp)	* header get
+	move.l	a3,-(sp)
+	move.w	FP(a6),-(sp)
+	DOS	_READ
+	lea.l	10(sp),sp
+
+
+	lea.l	src_filesize(a6),a0
+	moveq	#3-1,d1		* src file size  &  ext file size  &  file time date
+				* 並び換え(Intel format -> Motorola format)
+@@:
+	move.l	(a0),d0
+	ror.w	#8,d0
+	swap	d0
+	ror.w	#8,d0
+	move.l	d0,(a0)+
+	dbra	d1,@b
+
+
+	lea.l	ext_filename_size(a6),a1	* ( AK0.03 )
+	moveq	#0,d2
+	move.b	(a1),d2
+	lea.l	5(a1,d2.w),a0
+	move.b	(a0),d1
+	lsl.w	#8,d1
+	move.b	-(a0),d1		* ディレクトリ情報SIZE ？
+
+
+	*lea.l	lzhID,a3
+	addq.l	#1,a3
+	cmpi.b	#'-',(a3)+
+	bne	format_err
+	cmpi.w	#'lh',(a3)+
+	bne	format_err
+	move.b	(a3)+,d6
+	cmpi.b	#'-',(a3)
+	bne	format_err
+	cmpi.b	#'d',d6		* ディレクトリ？ CHECK
+	beq	format_err
+	subi.b	#'0',d6		* 対応フォーマット 'lhX' : X = 0 or 4 or 5
+	move.b	d6,d0
+	beq	Lha124
+	subq.b	#4,d0
+	beq	Lha124
+	subq.b	#1,d0
+	bne	format_err
+Lha124:
+
+
+	btst	#4,attribute(a6)	* アトリビュート
+	bne	format_err
+
+	cmpi.b	#'H',3(a1,d2.w)		* 使用ＯＳのチェック ( AK0.03 )
+	beq	Human			*   H=Human , M=MSDOS , U=Unix , ...
+
+
+	* Human以外のＯＳに対する処理 ( AK0.03 )
+	* つまりフォーマットのわかってない所は全部読み飛ばす
+	* 従って、ディレクトリ情報などがもしあったとしても
+	* 展開されることはない
+	lea.l	5(a1,d2.w),a0
+	moveq	#0,d0
+	move.b	(a0),d0
+	lsl.w	#8,d0
+	move.b	-(a0),d0
+
+	bsr	読飛0
+	clr.w	d1
+
+
+Human:
+	bsr	dir_get		* ( AK0.03 )( AK0.04 )
+
+	movea.l	EXT_BUF(a6),a3
+	move.l	ext_filesize(a6),d5
+
+	cmp.l	left_area(a6),d5
+	bhi	mem_over
+
+	tst.b	d6
+	bne	ext01
+mama:					* 無圧縮
+	move.l	d5,-(sp)
+	move.l	a3,-(sp)
+	move.w	FP(a6),-(sp)
+	DOS	_READ
+	lea.l	10(sp),sp
+	bra	close
+
+
+
+ext01:
+	move.l	src_filesize(a6),d2
+	subq.l	#2,d2
+	bmi	format_err
+
+	moveq	#2,d7
+	bsr	extension		*
+
+
+close:
+	move.w	FP(a6),-(sp)
+	DOS	_CLOSE
+	addq.l	#2,sp
+	move.l	ext_filesize(a6),d0
+return_d0:
+	lea.l	fac(pc),a0
+	move.l	d0,6(a0)
+	moveq.l	#0,d0
+	rts
+fac:
+	.dc.w	0
+	.dc.l	0
+	.dc.l	0
+
+
+**	**	**	**	**	**
+
+file_cant_open:
+	lea.l	_file_cant_open(pc),a1
+	moveq	#1,d0
+	rts
+not_lzh_file:
+format_err:
+	lea.l	_not_lzh_file(pc),a1
+	moveq	#1,d0
+	rts
+mem_over:
+	lea.l	_mem_over(pc),a1
+	moveq	#1,d0
+	rts
+_mem_over:
+	.dc.b	'配列が展開ファイルの大きさより小さいです',0
+_not_lzh_file:
+	.dc.b	'指定のファイルは .LZH 形式の圧縮ファイルではなさそうです',0
+_file_cant_open:
+	.dc.b	'指定のファイルをオープンできません',0
+	.even
+
+
+
+**	**	**	**	**	**
+
+**	**	**	**	**	**
+
+
+		* ヘッダのいらない尻尾を読み飛ばす ( AK0.03 )
+読飛:
+	subq.l	#8,sp
+	move.w	FP(a6),(sp)
+	bra	読飛_mucha
+
+読飛0:
+	sub.l	d0,src_filesize(a6)
+	subq.w	#2,d0
+	bls	読飛終了
+	move.w	#1,-(sp)
+	move.l	d0,-(sp)
+	move.w	FP(a6),-(sp)
+	DOS	_SEEK
+読飛_mucha:
+	DOS	_FGETC
+	move.b	d0,d1
+	DOS	_FGETC
+	lsl.w	#8,d0
+	move.b	d1,d0
+	addq.l	#8,sp
+	bra	読飛0
+
+読飛終了:
+	rts
+
+
+**	**	**	**	**	**
+
+**	**	**	**	**	**
+
+**	**	**	**	**	**
+
+ *		ディレクトリ情報 読み込み ( AK0.03 )( AK0.04 )
+dir_get:
+	sub.l	d1,src_filesize(a6)
+	subq.w	#2,d1
+	bcs	dir_get_1
+
+	move.l	d1,-(sp)
+	pea.l	_direct(a6)
+	move.w	FP(a6),-(sp)
+	DOS	_READ
+	lea.l	10(sp),sp
+
+	lea.l	_direct+1(a6),a2
+	subq.w	#2,d1
+
+	bsr	読飛
+dir_get_1:
+	rts
+
+
+**	**	**	**	**	**
+
+**	**	**	**	**	**
+
+
+
+
+
+*	a3 :	展開先
+*	d5 :	展開後のファイルサイズ
+
+
+*	.xdef	extension
+extension:
+	movem.l	d3-d6/a3-a5,-(sp)
+	moveq	#2,d7
+	swap	d7
+	moveq	#$10,d1
+	bsr	bitworknew
+
+	lea.l	M1c8e(a6),a4
+	lea.l	M3e8e(a6),a5
+	subq.l	#1,d5
+	bcs	ext_end
+
+	bsr	table_new
+
+
+ext_loop:
+	moveq	#0,d0
+	move.w	(a6),d0
+	move.w	d0,d3
+	lsl.w	#4,d3	* 下４ビット (d3 は bite のみ有効)
+	lsr.w	#4,d0	* 上12ビット
+	add.w	d0,d0
+	move.w	(a4,d0.w),d0
+	cmp.w	#$1fe,d0
+	bcs	@f
+	move.w	#$1fe,d1
+	bsr	number_get
+@@:
+
+	move.b	(a5,d0.w),d1
+	bsr	bitworknew		*
+
+	cmpi.w	#$ff,d0
+	bhi	slide_dic
+	move.b	d0,(a3)+
+	dbra	d5,ext_loop_cont
+	clr.w	d5
+	subq.l	#1,d5
+	bcc	ext_loop_cont
+	bra	ext_end
+
+
+slide_dic:
+	move.l	d0,d2
+	move.w	(a6),d3
+	clr.w	d0
+	move.b	(a6),d0
+	add.w	d0,d0
+	lea.l	M3c8e(a6),a0
+	move.w	(a0,d0.w),d0
+	moveq	#$e,d1
+	cmp.w	d1,d0
+	bcs	@f
+	bsr	number_get
+@@:
+
+	lea.l	-1(a3),a0
+	lea.l	M408c(a6),a1
+	move.b	(a1,d0.w),d1
+	bsr	bitworknew
+	move.w	d0,d1
+	beq	sdc01
+
+	subq.w	#1,d1
+	move.l	d4,d0
+	clr.w	d0
+	rol.l	d1,d0
+	bset	d1,d0
+	bsr	bitworknew
+
+	suba.w	d0,a0
+sdc01:
+	sub.w	#$fd,d2
+	sub.l	d2,d5
+	bcs	L298
+
+	subq.w	#1,d2
+@@:
+	move.b	(a0)+,(a3)+
+	dbra	d2,@b
+
+ext_loop_cont:
+	dbra	d6,ext_loop
+	bsr	table_new
+	bra	ext_loop
+
+
+L298:
+	subq.w	#1,d2
+@@:
+	move.b	(a0)+,(a3)+
+	dbra	d2,@b
+
+ext_end:
+	movem.l	(sp)+,d3-d6/a3-a5
+	rts
+
+
+
+
+
+
+
+
+*	.xdef	number_get
+number_get:		* input d0.w d1.w d3.b
+	lea.l	M1498(a6),a0
+	lea.l	M0ca2(a6),a1
+ng1:
+	add.w	d0,d0
+	add.b	d3,d3
+	bcc	ng2
+	move.w	(a0,d0.w),d0
+	cmp.w	d1,d0
+	bcc	ng1
+	rts
+ng2:
+	move.w	(a1,d0.w),d0
+	cmp.w	d1,d0
+	bcc	ng1
+	rts
+
+
+
+
+
+*	.xdef	table_new
+table_new:
+	moveq	#$10,d1
+	move.w	(a6),d0
+	bsr	bitworknew
+	subq.w	#1,d0
+	move.w	d0,d6
+
+	move.l	#$5_0003,-(sp)
+	move.w	#$13,-(sp)
+	bsr	L51a		*
+	bsr	L3f0		*
+	move.l	#$4_ffff,(sp)
+	move.w	#$e,-(sp)
+	bsr	L51a		*
+	addq.l	#8,sp
+	rts
+
+
+
+
+
+
+
+**	**	**	**	**	**	**
+
+
+*	.xdef	L3f0
+L3f0:
+	movem.l	a3/a5,-(sp)
+	lea.l	M3e8e(a6),a3
+	moveq	#9,d1
+	move.w	(a6),d0
+	lsr.w	#$10-9,d0
+	bsr	bitworknew
+
+	cmpi.w	#$1fe,d0
+	bhi	format_err
+	tst.w	d0
+	bne	L44c
+
+	*
+	move.w	#$1fe/2-1,d1
+L41e:
+	move.w	d0,(a3)+
+	dbra	d1,L41e
+
+	moveq	#9,d1
+	move.w	(a6),d0
+	lsr.w	#$10-9,d0
+	bsr	bitworknew
+
+	move.w	d0,d1
+	swap	d0
+	move.w	d1,d0
+	move.w	#$1000/8-1,d1
+	lea.l	M1c8e(a6),a0
+@@:
+	move.l	d0,(a0)+
+	move.l	d0,(a0)+
+	move.l	d0,(a0)+
+	move.l	d0,(a0)+
+	dbra	d1,@b
+	bra	L514
+
+
+L44c:		* d0 nonzero
+	movea.l	a3,a5
+	adda.w	d0,a5
+
+
+tm1_loop:
+	move.w	(a6),d0
+	move.w	d0,d3
+	lsr.w	#8,d0
+	add.w	d0,d0
+	lea.l	M3c8e(a6),a0
+	move.w	(a0,d0.w),d0
+	moveq.l	#$13,d1
+	cmp.w	d1,d0
+	bcs	@f
+	bsr	number_get
+@@:
+
+	lea.l	M408c(a6),a0
+	move.b	(a0,d0.w),d1
+	bsr	bitworknew
+	move.w	d0,d3
+	subq.w	#2,d3
+	bhi	L4d6
+	bne	L4aa
+	moveq.l	#9,d1
+	move.w	(a6),d0
+	lsr.w	#$10-9,d0
+	bsr	bitworknew
+
+	moveq.l	#$13,d3
+	add.w	d0,d3
+	bra	L4cc
+
+L4aa:
+	addq.w	#1,d3
+	bne	L4c2
+	moveq.l	#4,d1
+	moveq	#0,d0
+	move.b	(a6),d0
+	lsr.w	d1,d0		* 実は $10-4-8 = 4 = d1
+	bsr	bitworknew
+	addq.w	#2,d0
+	move.w	d0,d3
+L4cc:
+	clr.b	(a3)+
+	dbra	d3,L4cc
+	bra	L450
+
+L4c2:
+	clr.b	(a3)+
+	bra	L450
+
+
+L4d6:
+	move.b	d3,(a3)+
+	*bra	L450
+
+
+	*
+L450:
+	cmpa.l	a5,a3
+	bcs	tm1_loop
+	moveq.l	#0,d0
+	move.l	a3,d1
+	lea.l	M408c(a6),a3
+	exg.l	d1,a3
+	sub.l	a3,d1
+	ble	L4f2
+	subq.w	#1,d1
+@@:
+	move.b	d0,(a3)+
+	dbra	d1,@b
+L4f2:
+	pea.l	M1c8e(a6)
+	pea.l	$c.w
+	pea.l	M3e8e(a6)
+	move.w	#$1fe,-(sp)
+	bsr	table_make
+	lea.l	$e(sp),sp
+L514:
+	movem.l	(sp)+,a3/a5
+	rts
+
+
+
+
+
+
+*	.xdef	L51a
+L51a:
+	movem.l	a3-a5,-(sp)
+	move.w	$a-4+12(sp),d1
+*	moveq.l	#$10,d3
+*	sub.w	d1,d3
+*	move.w	(a6),d0
+*	lsr.w	d3,d0
+	move.l	d4,d0
+	clr.w	d0
+	rol.l	d1,d0
+	bsr	bitworknew
+
+	cmp.w	8-4+12(sp),d0
+	bhi	format_err
+	lea.l	M408c(a6),a3
+	tst.w	d0
+	bne	L574
+	move.w	8-4+12(sp),d1
+	ble	L54e
+	subq.w	#1,d1
+@@:
+	move.b	d0,(a3)+
+	dbra	d1,@b
+L54e:
+	move.w	$a-4+12(sp),d1
+*	moveq.l	#$10,d3
+*	sub.w	d1,d3
+*	move.w	(a6),d0
+*	lsr.w	d3,d0
+	move.l	d4,d0
+	clr.w	d0
+	rol.l	d1,d0
+	bsr	bitworknew
+
+	lea.l	M3c8e(a6),a0
+	moveq	#$100/2-1,d1
+L56a:
+	move.w	d0,(a0)+
+	move.w	d0,(a0)+
+	dbra	d1,L56a
+	bra	L60e	* sub end
+
+
+L574:
+	movea.l	a3,a4
+	adda.w	d0,a4
+	movea.l	a3,a5
+	adda.w	$c-4+12(sp),a5
+L57e:
+	cmpa.l	a4,a3
+	bcc	L5d4
+	moveq.l	#3,d1
+	move.l	d4,d0
+	clr.w	d0
+	rol.l	d1,d0
+	bsr	bitworknew
+
+	cmpi.b	#7,d0
+	bne	L5b2
+	move.w	(a6),d1
+	add.w	d1,d1
+	bcc	L5a4
+L59c:
+	addq.w	#1,d0
+	add.w	d1,d1
+	bcs	L59c
+
+
+L5a4:
+	move.w	d0,d1
+	subq.w	#6,d1
+	bsr	bitworknew
+L5b2:
+	move.b	d0,(a3)+
+	cmpa.l	a5,a3
+	bne	L57e
+	moveq.l	#2,d1
+	move.l	d4,d0
+	clr.w	d0
+	rol.l	d1,d0
+	bsr	bitworknew
+
+
+	tst.w	d0
+	ble	L57e
+	moveq.l	#0,d1
+	subq.w	#1,d0
+L5cc:
+	move.b	d1,(a3)+
+	dbra	d0,L5cc
+	bra	L57e
+
+
+L5d4:
+	moveq.l	#0,d0
+	move.l	a3,d1
+	lea.l	M408c(a6),a3
+	exg.l	d1,a3
+	sub.l	a3,d1
+	add.w	8-4+12(sp),d1
+	subq.w	#1,d1
+	bmi	L5ee
+	*swap	d0	* d0.b = 0
+	clr.w	d0
+L5e8:
+	move.b	d0,(a3)+
+	dbra	d1,L5e8
+L5ee:
+	pea.l	M3c8e(a6)
+	pea.l	8.w
+	pea.l	M408c(a6)
+	move.w	8-4+12+12(sp),-(sp)
+	bsr	table_make
+	lea.l	$e(sp),sp
+L60e:
+	movem.l	(sp)+,a3-a5
+	rts
+
+
+
+
+
+
+****
+
+*	d1 ビット分ワークに入力する
+
+*	.xdef	bitworknew
+bitworknew:
+	cmp.b	d7,d1
+	ble	L748
+	sub.b	d7,d1
+	lsl.l	d7,d4
+
+	swap	d7
+	subq.w	#2,d7
+	bne	rd_2
+	bsr	read
+rd_2:
+	swap	d7
+
+	move.w	(a2)+,d4
+	move.w	#$10,d7		* 16 bit
+L748:
+	sub.b	d1,d7
+	lsl.l	d1,d4
+	move.l	d4,(a6)
+	rts
+
+
+
+
+*	.xdef	read
+read:
+	move.l	d0,-(sp)
+	move.l	#BUF_SIZE,d0
+	move.w	d0,d7
+	sub.l	d0,src_filesize(a6)
+	bcc	read_1
+	add.l	src_filesize(a6),d0
+read_1:
+	lea.l	buf2(a6),a2
+	move.l	d0,-(sp)
+	move.l	a2,-(sp)
+	move.w	FP(a6),-(sp)
+	DOS	_READ
+	lea.l	10(sp),sp
+	move.l	(sp)+,d0
+	rts
+
+
+
+
+
+
+
+
+****
+
+* example
+*	para1.w		$1fe(=510)	8(a6)  $13 or $e
+*	para2.l		M3e8e(510)	M408c(128)
+*	para3.l		$c(2^c+1=8192)	8(2^8+1=512)
+*	para4.l		M1c8e(8192)	M3c8e(512)
+
+
+*	.xdef	table_make
+table_make:
+	movem.l	d3-d7/a2-a5,-(sp)
+	move.w	8-4+4*9(sp),d3
+	movem.l	$c-2-4+4*9(sp),a3/a4
+	lea.l	M4192(a6),a5
+
+
+	movea.l	a5,a0
+	moveq.l	#0,d0
+	moveq	#52/2-1,d5
+L7c8:
+	move.l	d0,(a0)+
+	dbra	d5,L7c8
+
+
+
+	move.w	d3,d2
+	subq.w	#1,d2
+	movea.l	a3,a1
+L7e0:
+	move.b	(a1)+,d0
+	add.w	d0,d0
+	addq.w	#1,M41d8-M4192(a5,d0.w)
+	dbra	d2,L7e0
+
+
+
+
+	moveq.l	#$10-1,d2
+	lea.l	4(a5),a1
+	lea.l	M41d8+2(a6),a0
+	moveq	#0,d1
+L81e:
+	move.w	(a0)+,d0
+	asl.w	d2,d0
+	add.w	d0,d1
+	move.w	d1,(a1)+
+	dbra	d2,L81e
+
+
+
+
+	moveq.l	#$10,d5
+	sub.w	a4,d5
+	move.w	a4,d2
+	subq.w	#1,d2
+	moveq	#0,d1
+	bset	d2,d1
+	lea.l	M41b6+2(a6),a1
+	lea.l	2(a5),a0
+L856:
+	move.w	(a0),d0
+	lsr.w	d5,d0
+	move.w	d0,(a0)+
+	move.w	d1,(a1)+
+	lsr.w	#1,d1
+	dbra	d2,L856
+
+
+	move.w	d5,d2
+	subq.w	#1,d2
+	moveq.l	#0,d1
+	bset	d2,d1
+L886:
+	move.w	d1,(a1)+
+	lsr.w	#1,d1
+	dbra	d2,L886
+
+
+
+
+
+	move.w	a4,d0
+	moveq	#0,d1
+	bset	d0,d1
+	add.w	d0,d0
+	move.w	2(a5,d0.w),d2
+	lsr.w	d5,d2
+	beq	L8d0
+
+	sub.w	d2,d1
+	beq	L8d0
+	subq.w	#1,d1
+
+	movea.l	$14-2-4+$24(sp),a0
+	add.w	d2,d2
+	adda.w	d2,a0
+	moveq	#0,d0
+L8c8:
+	move.w	d0,(a0)+
+	dbra	d1,L8c8
+L8d0:
+
+	*
+
+****
+
+
+
+
+	moveq.l	#0,d6
+	move.w	d3,d7
+
+
+table_make_loop:
+	moveq	#0,d0
+	move.b	(a3)+,d0
+	beq	L9da
+	move.w	d0,d2
+
+	add.w	d0,d0
+	move.w	(a5,d0.w),d4
+	move.w	d4,d1
+	add.w	M41b6-M4192(a5,d0.w),d1
+	move.w	d1,(a5,d0.w)
+
+	movea.l	$14-2-4+$24(sp),a0
+	cmpa.w	d2,a4
+	bcs	L946
+
+	move.w	d1,d2
+	sub.w	d4,d2
+	*bls	L9da
+	subq.w	#1,d2
+	add.w	d4,d4
+	adda.w	d4,a0
+L93a:
+	move.w	d6,(a0)+
+	dbra	d2,L93a
+	bra	L9da
+
+
+L946:		* 呼ばれる回数少ない？
+	move.w	d4,d0
+	lsr.w	d5,d0
+	add.w	d0,d0
+	adda.w	d0,a0
+	sub.w	a4,d2
+	subq.w	#1,d2
+	bmi	L9c8
+
+	move.w	d7,d0
+	add.w	d0,d0
+	lea.l	M1498(a6),a2
+	adda.w	d0,a2
+	lea.l	M0ca2(a6),a1
+	adda.w	d0,a1
+	moveq	#0,d0
+L990:
+	move.w	(a0),d1
+	bne	L99c
+	move.w	d0,(a1)+
+	move.w	d0,(a2)+
+	move.w	d7,(a0)
+	move.w	d7,d1
+	addq.w	#1,d7
+L99c:
+	add.w	d4,d4
+	btst	d5,d4
+	beq	L9b2
+	lea.l	M1498(a6),a0
+	bra	L9be
+L9b2:
+	lea.l	M0ca2(a6),a0
+L9be:
+	add.w	d1,d1
+	adda.w	d1,a0
+	dbra	d2,L990
+
+
+L9c8:
+	move.w	d6,(a0)
+L9da:
+	addq.w	#1,d6
+	cmp.w	d3,d6
+	bcs	table_make_loop
+
+
+	movem.l	(sp)+,d3-d7/a2-a5
+	rts
+
+
+
+
+	.bss
+WORK_adr:
+	.ds.b	WORK_SIZE
+	.end

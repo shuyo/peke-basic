@@ -1,0 +1,3620 @@
+
+*━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*
+*	xbstat.has  ……   ぺけ-ＢＡＳＩＣのステートメント（コンパイラ）
+*
+*━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+	.include	variable.h
+	.include	fefunc.h
+
+	.xref	variable_check
+	.xref	math解釈
+	.xref	error
+	.xref	errors
+	.xref	warning
+	.xref	warnings
+	.xref	function_check
+	.xref	one_check
+	.xref	int定数get
+	.xref	fnc書替sub
+	.xref	I行数算出
+
+	.xref	malloc
+	.xref	buf書込
+	.xref	buf書込L
+	.xref	bufget
+	.xref	bufgetL
+	.xref	bufput
+
+
+
+
+
+	.text
+	.even
+
+	.xdef	first_check_a5
+ * a5 から調べ始める。
+ * まず、空白(9,10,13,32)を飛ばして、先頭の文字を見る。
+ * 数字（行番号のはず）なら	d0 = 0
+ * プログラム終了なら		d0 = -1
+ * その他なら			d0 = そのキャラクタ
+first_check_a5:
+fc_loop:
+	moveq	#0,d0
+	move.b	(a5),d0
+	cmpi.b	#$20,d0
+	bhi	fc_loop_out
+	beq	fc_next
+	cmpi.b	#9,d0
+	beq	fc_next
+	bcs	@f
+	cmpi.b	#$d,d0
+	ble	fc_crlf		* $a～$d
+	cmpi.b	#$1a,d0
+	beq	last
+	bra	fc_ret		* おそらく出てくるはずのない ctrl code
+@@:
+	tst.b	d0
+	beq	last
+	bra	fc_loop_out
+fc_crlf:
+	cmpi.b	#$a,d0
+	bne	fc_next
+	addq.l	#1,行数
+
+	btst	#no_cnfF,d7
+	beq	fc_next		* 以下、コンフィグ読み込みには関係ない処理
+
+	move.l	a0,-(sp)	* else 関係の処理に使うから
+
+	move.l	a4,d0
+	sub.l	$c+中間言語行数,d0
+	move.l	a4,$c+中間言語行数
+ * 鎖状のバッファ(size = CbufSIZE * word )を malloc して、d0.w を書き込む
+ * d1.w/a0-a1 破壊
+	movem.l	d1/a1,-(sp)
+	pea.l	中間言語行数
+	bsr	buf書込
+	addq.l	#4,sp
+	movem.l	(sp)+,d1/a1
+
+@@:
+	movea.l	nest_work,a0
+	tst.l	(a0)
+	beq	@f
+	cmpi.w	#3,8(a0)	* if
+	bne	@f
+	move.w	10(a0),d0
+	btst	#0,d0
+	bne	@f
+
+	bsr	If_end		* if 文で、改行終わりの時
+	bra	@b	* もう一個上にあるかも
+@@:
+	move.l	(sp)+,a0
+
+
+
+ * ここは行の先頭。数字が有ったら行番号だから飛ばす
+		addq.l	#1,a5
+top_line_loop:
+		moveq	#0,d0
+		move.b	(a5),d0
+		beq	last
+		cmpi.b	#32,d0
+		bhi	top_line_loop_out
+		beq	top_line_cont
+		cmpi.b	#9,d0
+		beq	top_line_cont
+		bcs	fc_ret
+		cmpi.b	#13,d0
+		ble	fc_crlf		* また改行
+		cmpi.b	#$1a,d0
+		beq	last
+		bra	fc_ret		* おそらく出てくるはずのない ctrl code
+top_line_cont:
+		addq.l	#1,a5
+		bra	top_line_loop
+
+
+top_line_loop_out:
+		cmpi.b	#'9',d0
+		bhi	fc_topret
+		cmpi.b	#'0',d0
+		bcs	fc_topret
+	 * 数字だ
+		btst	#linenumF,d7
+		beq	fc_数字
+	 * 行番号有り
+		move.l	a0,-(sp)
+		movea.l	a5,a0
+		FPACK	__STOL
+		movea.l	a0,a5
+		cmpi.l	#$10000,d0
+		bcc	不正な行番号
+		movem.l	d1/a1,-(sp)
+		pea.l	行番号
+		bsr	buf書込		* d1.w/a0-a1 破壊
+		addq.l	#4,sp
+		movem.l	(sp)+,d1/a1
+		move.l	(sp)+,a0
+
+		move.b	(a5),d0
+		cmpi.b	#9,d0
+		beq	first_check_a5
+		cmpi.b	#32,d0
+		beq	first_check_a5
+		ERROR	66		* 行番号で切れてない。
+不正な行番号:
+		ERROR	79
+
+fc_next:
+	addq.l	#1,a5
+	bra	fc_loop
+
+
+fc_loop_out:
+	cmpi.b	#'9',d0
+	bhi	fc_ret
+	cmpi.b	#'0',d0
+	bcs	fc_ret
+	moveq	#0,d0
+fc_ret:
+	rts
+
+last:
+	moveq	#-1,d0
+	rts
+fc_topret:
+	btst	#linenumF,d7
+	beq	fc_ret
+	WARN	12		* 行番号ない
+	rts
+fc_数字:
+	WARN	13		* 先頭数字
+	moveq	#0,d0
+	rts
+
+
+
+
+
+	.xdef	first_check_a5_in_line
+first_check_a5_in_line:
+	moveq	#0,d0
+fci_loop:
+	move.b	(a5),d0
+	tst.b	_is_hash(a6,d0.w)	* 流用
+	bge	fci_loop_out
+fci_next:
+	addq.l	#1,a5
+	bra	fci_loop
+
+
+fci_loop_out:
+	cmpi.b	#'9',d0
+	bhi	fci_ret
+	cmpi.b	#'0',d0
+	bcs	fci_ret2
+	moveq	#0,d0
+	rts
+
+fci_ret2:
+	cmpi.b	#$1a,d0
+	bhi	fci_ret
+	beq	lasti
+	cmpi.b	#$d,d0
+	beq	lasti
+	cmpi.b	#$a,d0
+	beq	lasti
+	tst.b	d0
+	bne	fci_ret
+lasti:
+	moveq	#-1,d0
+fci_ret:
+	rts
+
+
+first_check_a5_remark:
+	bsr	first_check_a5
+	cmpi.b	#'/',d0
+	bne	@f
+	cmpi.b	#'*',1(a5)
+	bne	@f
+	bsr	行末まで飛ばし
+	bra	first_check_a5_remark
+@@:
+	rts
+
+
+ * else があるかどうかチェック
+ * eq = ある , ne = ない
+	.xdef	else_check
+else_check:
+	bsr	first_check_a5_in_line
+	cmpi.b	#'e',(a5)
+	bne	@f
+	cmpi.b	#'l',1(a5)
+	bne	@f
+	cmpi.b	#'s',2(a5)
+	bne	@f
+	cmpi.b	#'e',3(a5)
+*	bne	@f
+*	addq.w	#4,a5
+@@:
+	rts
+
+
+
+
+
+
+
+
+
+
+
+	.xdef	行末まで飛ばし
+行末まで飛ばし:
+	move.b	(a5)+,d0
+	beq	@f
+	cmpi.b	#$a,d0
+	bne	行末まで飛ばし
+@@:
+	subq.l	#1,a5
+	rts
+
+
+
+
+
+	.xdef	make_hash_istable
+make_hash_istable:
+	lea.l	$100+_is_hash(a6),a0
+	move.w	#$ff,d1
+	moveq	#1,d0
+3:
+	cmpi.b	#'$',d1
+	beq	@f
+	cmpi.b	#'0',d1
+	bcs	2f
+	cmpi.b	#'9',d1
+	bls	@f
+	cmpi.b	#'A',d1
+	bcs	2f
+	cmpi.b	#'Z',d1
+	bls	@f
+	cmpi.b	#'_',d1
+	beq	@f
+	cmpi.b	#'a',d1
+	bcs	2f
+	cmpi.b	#'z',d1
+	bls	@f
+	bra	2f
+@@:
+	clr.b	-(a0)
+	bra	4f
+2:
+	move.b	d0,-(a0)	* d0 = +1
+4:
+	dbra	d1,3b
+
+*	moveq	#-1,d1		*
+	move.b	d1,9(a0)
+	move.b	d1,32(a0)
+	rts
+
+
+
+ * ハッシュ値を計算しながら、文字数を数える
+ * a2.l = 元の対象の開始アドレス
+ * d5.w = ハッシュ値だ。上位バイトもそのままだ
+ * d4.w = 文字数 - 1
+ * d1.b = お次の文字 (  (,[,=,:, , etc... TAB,SPC 以外 )
+ * ( ここに書いてあるもの以外を壊してはいけない )
+	.xdef	hash
+hash:
+	movea.l	a5,a2
+	moveq	#0,d5
+	moveq	#0,d1
+	moveq	#0,d4
+hloop:
+	move.b	(a5)+,d1
+	tst.b	_is_hash(a6,d1.w)
+	beq	@f	* 英数字、＄、＿
+	bgt	h_end
+	bra	h_space
+
+@@:
+	rol.w	#2,d5		* ハッシュ値計算（6/11/4 現在)
+	eor.w	d1,d5
+	addq.w	#1,d4
+	bra	hloop
+
+h_space:
+	move.b	(a5)+,d1
+	tst.b	_is_hash(a6,d1.w)
+	bmi	h_space
+h_end:
+	subq.l	#1,a5
+	subq.w	#1,d4
+	swap	d4
+	move.w	d5,d4
+	swap	d4	* (hash.w)(文字数-1)
+	rts
+
+
+
+	.xdef	hash_label特別
+hash_label特別:
+	movea.l	a5,a2
+	moveq	#0,d5
+	moveq	#0,d1
+	moveq	#0,d4
+hloop_lt:
+	move.b	(a5)+,d1
+	cmpi.b	#'"',d1
+	bhi	@f
+	beq	h_end_lt
+	cmpi.b	#$20,d1
+	bcs	label_err
+@@:
+	rol.w	#2,d5		* ハッシュ値計算（6/11/4 現在)
+	eor.w	d1,d5
+	addq.w	#1,d4
+	bra	hloop_lt
+
+h_space_lt:
+	move.b	(a5)+,d1
+	tst.b	_is_hash(a6,d1.w)
+	bmi	h_space_lt
+h_end_lt:
+	subq.l	#1,a5
+	subq.w	#1,d4
+	swap	d4
+	move.w	d5,d4
+	swap	d4	* (hash.w)(文字数-1)
+	rts
+
+label_err:
+	ERROR	82
+
+
+
+
+
+ * (a2) から始まる名前(d4.w = 長さ - 1)を登録し、アドレスを a0 に返す。
+	.xdef	名前登録
+名前登録:
+	move.w	d0,-(sp)
+	movea.l	名前,a0
+	move.w	4+名前,d0
+@@:
+	sub.w	d4,d0
+	subq.w	#1,d0
+	bge	@f
+	move.w	#$400,d0
+	bsr	malloc
+	bra	@b
+@@:
+
+	move.l	a0,-(sp)
+@@:
+	move.b	(a2)+,(a0)+
+	dbra	d4,@b
+*	clr.b	(a0)+		* いらないけど一応気持ち
+	move.l	a0,名前
+	move.w	d0,4+名前
+	movea.l	(sp)+,a0
+	move.w	(sp)+,d0
+	rts
+
+
+
+
+
+
+ * 対象がどれかステートメントと一致するかどうか
+ * a2.l = 元の対象の開始アドレス
+ * d5.w = ハッシュ値
+ * d4.w = 文字数 - 1
+
+ * 一致すれば		d0 = そのステートメント番号
+ * 一致しなければ	d0 = 0
+	.xdef	statement_check
+statement_check:
+	moveq	#0,d0
+	move.b	d5,d0	* ハッシュ値の下位バイトで見当を付ける
+	move.b	stat_hash_table(pc,d0.w),d0
+	bne	sc_本格check
+	rts
+
+	* ステートメント用のハッシュ値テーブル (１対１対応)
+stat_hash_table:
+	.dc.b	$23,$00,$00,$00,$00,$00,$00,$00,$20,$00,$00,$27,$0C,$00,$0A,$00
+	.dc.b	$15,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	.dc.b	$1A,$1C,$00,$00,$00,$00,$00,$00,$00,$28,$00,$07,$00,$00,$00,$00
+	.dc.b	$00,$00,$00,$00,$11,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$08
+	.dc.b	$00,$00,$00,$00,$1D,$21,$17,$00,$00,$00,$00,$00,$1F,$00,$00,$00
+	.dc.b	$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$14,$24,$1B,$00,$00
+	.dc.b	$00,$00,$00,$00,$03,$00,$00,$00,$00,$00,$00,$00,$00,$00,$0E,$00
+	.dc.b	$00,$00,$00,$00,$00,$00,$00,$00,$00,$09,$29,$00,$00,$00,$00,$00
+	.dc.b	$00,$00,$00,$00,$00,$00,$00,$00,$00,$22,$00,$00,$13,$00,$00,$18
+	.dc.b	$00,$00,$26,$00,$00,$00,$00,$00,$2a,$00,$00,$00,$00,$0D,$00,$00
+	.dc.b	$00,$1E,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$16,$00
+	.dc.b	$00,$00,$00,$00,$00,$00,$25,$00,$06,$00,$00,$00,$00,$00,$00,$00
+	.dc.b	$00,$00,$19,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$01,$00
+	.dc.b	$00,$00,$00,$0B,$00,$00,$00,$00,$00,$00,$00,$00,$05,$04,$00,$00
+	.dc.b	$00,$00,$02,$00,$00,$10,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	.dc.b	$00,$00,$00,$12,$00,$00,$00,$0F,$00,$00,$00,$00,$00,$00,$00,$00
+
+sc_本格check:
+	move.w	d0,d2
+	lsl.w	#2,d2
+	cmp.w	stat(pc,d2.w),d4
+	bne	sc_該当無し
+	move.w	2+stat(pc,d2.w),d2
+	lea.l	stat(pc,d2.w),a0
+	move.l	a2,a1
+	move.w	d4,d2
+@@:
+	cmp.b	(a1)+,(a0)+
+	dbne	d2,@b
+	beq	sc_ok
+sc_該当無し:
+	moveq	#0,d0
+sc_ok:
+	rts
+
+stat:
+	.dc.w	s01-s00-2,s00-stat	* dummy
+	.dc.w	s02-s01-2,s01-stat
+	.dc.w	s03-s02-2,s02-stat
+	.dc.w	s04-s03-2,s03-stat
+	.dc.w	s05-s04-2,s04-stat
+	.dc.w	s06-s05-2,s05-stat
+	.dc.w	s07-s06-2,s06-stat
+	.dc.w	s08-s07-2,s07-stat
+	.dc.w	s09-s08-2,s08-stat
+	.dc.w	s10-s09-2,s09-stat
+	.dc.w	s11-s10-2,s10-stat
+	.dc.w	s12-s11-2,s11-stat
+	.dc.w	s13-s12-2,s12-stat
+	.dc.w	s14-s13-2,s13-stat
+	.dc.w	s15-s14-2,s14-stat
+	.dc.w	s16-s15-2,s15-stat
+	.dc.w	s17-s16-2,s16-stat
+	.dc.w	s18-s17-2,s17-stat
+	.dc.w	s19-s18-2,s18-stat
+	.dc.w	s20-s19-2,s19-stat
+	.dc.w	s21-s20-2,s20-stat
+	.dc.w	s22-s21-2,s21-stat
+	.dc.w	s23-s22-2,s22-stat
+	.dc.w	s24-s23-2,s23-stat
+	.dc.w	s25-s24-2,s24-stat
+	.dc.w	s26-s25-2,s25-stat
+	.dc.w	s27-s26-2,s26-stat
+	.dc.w	s28-s27-2,s27-stat
+	.dc.w	s29-s28-2,s28-stat
+	.dc.w	s30-s29-2,s29-stat
+	.dc.w	s31-s30-2,s30-stat
+	.dc.w	s32-s31-2,s31-stat
+	.dc.w	s33-s32-2,s32-stat
+	.dc.w	s34-s33-2,s33-stat
+	.dc.w	s35-s34-2,s34-stat
+	.dc.w	s36-s35-2,s35-stat
+	.dc.w	s37-s36-2,s36-stat
+	.dc.w	s38-s37-2,s37-stat
+	.dc.w	s39-s38-2,s38-stat
+	.dc.w	s40-s39-2,s39-stat
+	.dc.w	s41-s40-2,s40-stat
+	.dc.w	s42-s41-2,s41-stat
+	.dc.w	s43-s42-2,s42-stat
+
+
+
+st:
+* ステートメント
+s00:	*dummy
+s01:	.dc.b	'color',0
+s02:	.dc.b	'console',0
+s03:	.dc.b	'locate',0
+s04:	.dc.b	'lprint',0
+s05:	.dc.b	'print',0
+s06:	.dc.b	'width',0
+s07:	.dc.b	'screen',0
+
+s08:	.dc.b	'break',0
+s09:	.dc.b	'case',0
+s10:	.dc.b	'continue',0
+s11:	.dc.b	'default',0
+s12:	.dc.b	'endfunc',0
+s13:	.dc.b	'endswitch',0
+s14:	.dc.b	'error',0
+s15:	.dc.b	'return',0
+s16:	.dc.b	'switch',0
+s17:	.dc.b	'beep',0
+s18:	.dc.b	'cls',0
+s19:	.dc.b	'end',0
+s20:	.dc.b	'endwhile',0
+s21:	.dc.b	'exit',0
+s22:	.dc.b	'for',0
+s23:	.dc.b	'gosub',0
+s24:	.dc.b	'goto',0
+s25:	.dc.b	'if',0
+s26:	.dc.b	'input',0
+s27:	.dc.b	'key',0
+s28:	.dc.b	'linput',0
+s29:	.dc.b	'next',0
+s30:	.dc.b	'repeat',0
+s31:	.dc.b	'stop',0
+s32:	.dc.b	'until',0
+s33:	.dc.b	'while',0
+
+s34:	.dc.b	'dim',0
+s35:	.dc.b	'float',0
+s36:	.dc.b	'int',0
+s37:	.dc.b	'char',0
+s38:	.dc.b	'str',0
+
+s39:	.dc.b	'func',0
+
+s40:	.dc.b	'else',0
+s41:	.dc.b	'then',0
+s42:	.dc.b	'label',0
+s43:
+	.dc.b	0
+	.even
+
+
+
+
+
+ * 各ステートメントごとに文法が違うのでいちいち異なる解釈をしなければ
+ * d0 = statment #.
+	.xdef	stat解釈
+stat解釈:
+	move.w	d0,d2
+	add.w	d2,d2
+	move.w	stt(pc,d2.w),d0
+	jmp	stt(pc,d0.w)
+stt:
+	.dc.w	0		* dummy
+	.dc.w	Color-stt
+	.dc.w	Console-stt
+	.dc.w	Locate-stt
+	.dc.w	Lprint-stt
+	.dc.w	Print-stt
+	.dc.w	Width-stt
+	.dc.w	Screen-stt
+	.dc.w	Break-stt
+	.dc.w	Case-stt
+	.dc.w	Continue-stt		*10
+	.dc.w	Default-stt
+	.dc.w	Endfunc-stt
+	.dc.w	Endswitch-stt
+	.dc.w	Error-stt
+	.dc.w	Return-stt
+	.dc.w	Switch-stt
+	.dc.w	Beep-stt
+	.dc.w	Cls-stt
+	.dc.w	End-stt
+	.dc.w	Endwhile-stt		*20
+	.dc.w	Exit-stt
+	.dc.w	For-stt
+	.dc.w	Gosub-stt
+	.dc.w	Goto-stt
+	.dc.w	If-stt
+	.dc.w	Input-stt
+	.dc.w	Key-stt
+	.dc.w	Linput-stt
+	.dc.w	Next-stt
+	.dc.w	Repeat-stt		*30
+	.dc.w	Stop-stt
+	.dc.w	Until-stt
+	.dc.w	While-stt
+	.dc.w	Dim-stt
+	.dc.w	Float-stt	* 35
+	.dc.w	Int-stt
+	.dc.w	Char-stt
+	.dc.w	Str-stt
+	.dc.w	Func-stt
+	.dc.w	Else-stt		*40
+	.dc.w	Then-stt
+
+
+
+
+Gosub:
+	ERRORS	3	* 未サポート
+
+
+
+
+
+
+Goto:
+	move.w	d2,(a4)+		* 中間言語書き込み
+
+	pea.l	goto飛先
+
+	move.b	(a5),d0
+	cmpi.b	#'9',d0
+	bhi	goto_err
+	cmpi.b	#'0',d0
+	bcc	Goto番号
+	btst	#labelF,d7
+	beq	goto_err
+	cmpi.b	#'"',d0
+	beq	label_quote
+	cmpi.b	#'*',d0
+	bne	goto_err
+
+label_star:
+	addq.l	#1,a5
+	bsr	hash
+	bsr	label_sub	* d0 = label #
+	not.l	d0
+	bsr	buf書込L
+	bra	@f
+label_quote:
+	addq.l	#1,a5
+	bsr	hash_label特別
+	bsr	label_sub	* d0 = label #
+	cmpi.b	#'"',(a5)+
+	bne	label_quote_err
+	not.l	d0
+	bsr	buf書込L
+	bra	@f
+label_quote_err:
+	ERROR	82
+
+Goto番号:
+		btst	#linenumF,d7
+		beq	行番号無しにgoto
+		movea.l	a5,a0
+		FPACK	__STOL			* 行番号
+		movea.l	a0,a5
+		cmpi.l	#$10000,d0
+		bcc	不正な行番号
+		bsr	buf書込L
+@@:
+	move.l	a4,d0			* 飛び先書き込みアドレス
+	bsr	buf書込L		* d1.w/a0-a1 破壊
+*	addq.l	#4,a4
+	move.l	#4,(a4)+		* とりあえず安全策
+
+	addq.l	#4,sp
+	rts
+
+行番号無しにgoto:
+	ERROR	78
+goto_err:
+	ERROR	80
+
+
+
+
+	.xdef	label_sub
+label_sub:
+*	bsr	hash
+	bsr	label_check
+	tst.w	d1
+	bge	1f
+		move.w	8+ラベル,d1
+		addq.w	#1,d1
+		lsr.w	#3,d1		* label 番号
+
+		move.l	d1,-(sp)
+		pea.l	ラベル
+		move.l	d4,d0
+		bsr	buf書込L
+		bsr	名前登録	* a2,d4 破壊
+		move.l	a0,d0		* 名前アドレス
+		bsr	buf書込L
+		moveq	#-1,d0
+		bsr	buf書込L	* 行数（-1 = 未登録）
+		bsr	buf書込L	* （空き）
+		addq.l	#4,sp
+		move.l	(sp)+,d1
+1:
+	moveq	#0,d0
+	move.w	d1,d0
+	rts
+
+
+
+label_check:
+	move.w	8+ラベル,d3
+	addq.w	#1,d3
+	lsr.w	#3,d3		* label 個数
+	subq.w	#1,d3
+	bmi	label_check_end
+	movea.l	4+ラベル,a3
+	moveq	#CbufSIZE/8,d2
+	moveq	#0,d1
+label_check_loop:
+	cmp.l	(a3),d4
+	bne	label_check_cont
+		movea.l	4(a3),a0	* 名前
+		movea.l	a2,a1
+		move.w	d4,d0
+@@:
+		cmp.b	(a0)+,(a1)+
+		dbne	d0,@b
+		beq	label_check_ok
+
+label_check_cont:
+	lea.l	$10(a3),a3
+	addq.w	#1,d1
+	subq.w	#1,d2
+	dbeq	d3,label_check_loop
+	bne	label_check_end
+	movea.l	(a3),a3
+	moveq	#CbufSIZE/8,d2
+	dbra	d3,label_check_loop
+label_check_end:
+	moveq	#-1,d1
+label_check_ok:
+	rts
+
+
+
+
+
+
+
+	.xdef	Goto整理
+Goto整理:
+	movem.l	d0-d4/a0-a3,-(sp)
+
+	move.w	8+goto飛先,d4
+	addq.w	#1,d4
+	lsr.w	#2,d4		* goto 文の個数
+	subq.w	#1,d4
+	bmi	Goto整理_end
+	movea.l	4+goto飛先,a3
+	moveq	#CbufSIZE/4,d3
+Goto整理_loop:
+	move.l	(a3)+,d2	* 行番号
+	bge	@f
+	not.l	d2		* ラベル番号
+	move.w	d2,d1
+	lsl.w	#3,d1
+	addq.w	#4,d1		* 行数の格納位置
+
+	move.l	a3,-(sp)
+	movea.l	4+ラベル,a3
+	bsr	bufgetL		* ラベルのさすアドレス
+	move.l	(sp)+,a3
+	movea.l	d0,a1
+	bra	1f
+@@:
+	bsr	行番号to行数
+	tst.w	d1
+	bmi	行番号該当無し
+	bsr	行数toADDRESS
+1:
+	movea.l	(a3)+,a0	* 飛び先書き込みアドレス
+	bsr	goto_block_check
+	suba.l	a0,a1
+	move.l	a1,(a0)
+
+	subq.w	#1,d3
+	dbeq	d4,Goto整理_loop
+	bne	Goto整理_end
+	movea.l	(a3),a3
+	moveq	#CbufSIZE/4,d3
+	dbra	d4,Goto整理_loop
+
+Goto整理_end:
+	movem.l	(sp)+,d0-d4/a0-a3
+	rts
+
+行番号該当無し:
+	movea.l	(a3)+,a5	* 飛び先書き込みアドレス
+	bsr	I行数算出
+	ERROR	78
+
+
+ * goto=a0 と 飛び先=a1 の間に func がないかどうか
+goto_block_check:
+	movem.l	d5/a0/a1/a3,-(sp)
+	move.w	内部関数個数,d5
+	bmi	1f
+	movea.l	内部関数buf,a3
+	cmpa.l	a1,a0
+	bcs	@f
+	exg	a0,a1		* a0<a1
+
+@@:
+	lea.l	$c(a3),a3
+	move.l	(a3)+,d0	* func
+	cmp.l	a1,d0
+	bcc	1f
+	cmp.l	a0,d0
+	bcc	2f
+	dbra	d5,@b
+1:
+	movem.l	(sp)+,d5/a0/a1/a3
+	rts
+2:
+	movem.l	(sp)+,d5/a0/a1/a3
+	movea.l	a0,a5		* 飛び先書き込みアドレス
+	bsr	I行数算出
+	ERROR	83	* 関数ブロックの外に飛び出した
+
+
+
+
+
+
+ * d1 = 行数 ( 1,2,3,...) to  a1 = ADDRESS
+行数toADDRESS:
+	movem.l	d3/a3,-(sp)
+	move.w	d1,d3
+	subq.w	#1,d3
+	moveq	#0,d1
+	movea.l	4+中間言語行数,a3
+	move.l	中間言語,a1
+@@:
+	bsr	bufget
+	adda.w	d0,a1
+	addq.w	#1,d1
+	dbra	d3,@b
+	movem.l	(sp)+,d3/a3
+	rts
+
+
+ * d2 = 行番号  to  d1 = 行数 ( 1,2,3,...), =-1 なし
+行番号to行数:
+	movem.l	d3/a3,-(sp)
+	moveq	#0,d1
+	move.w	8+行番号,d3
+	movea.l	4+行番号,a3
+@@:
+	bsr	bufget
+	addq.w	#1,d1
+	cmp.w	d2,d0
+	dbeq	d3,@b
+	beq	@f
+	moveq	#-1,d1
+@@:
+	movem.l	(sp)+,d3/a3
+	rts
+
+
+
+
+
+**	**	**
+ *	内部関数関係のステートメントの処理
+
+
+	.xdef	Return
+Return:
+	tst.b	d7
+	bpl	funcがない
+
+	cmpi.b	#'(',(a5)
+	bne	_no_ret_dat2
+
+	addq.l	#1,a5
+	bsr	first_check_a5_in_line
+	cmpi.b	#')',d0
+	beq	_no_ret_dat
+
+	move.w	d2,(a4)+		* 中間言語書き込み
+
+	move.w	RETURNtype,d2
+	move.w	d2,(a4)+		* 中間言語書き込み
+
+	lsl.w	#8,d2
+	movea.l	a4,a3
+ * 解釈した結果を (a3) からに書き込み、その長さを d0.l に返す
+ * int		d2.w	= 0000
+ * str		d2.w	= 0100
+ * float	d2.w	= 8000
+	bsr	math解釈
+	movea.l	a3,a4
+
+	cmpi.b	#')',(a5)+
+	bne	err_return
+	rts
+
+err_return:
+	ERROR	50
+
+_no_ret_dat:
+	addq.l	#1,a5
+_no_ret_dat2:
+	tst.w	RETURNtype
+	bne	返り値がない
+	move.w	#$0c*2,(a4)+		* 中間言語書き込み'endfunc'$$$
+	clr.w	(a4)+			* 中間言語書き込み (int)
+	rts
+
+返り値がない:
+	ERROR	49
+
+
+Endfunc:
+	tst.b	d7
+	bpl	funcがない
+	bset	#endfuncF,d7
+	bne	funcがない
+
+	movea.l	nest_work,a0
+	tst.l	(a0)
+	bne	nest_structure終わってない
+
+	move.w	d2,(a4)+		* 中間言語書き込み
+	move.w	RETURNtype,(a4)+
+
+	bsr	auto変数リスト作成
+	rts
+
+funcがない:
+	ERROR	45
+
+
+
+
+
+
+	.xdef	Func
+Func:
+	bset	#modeF,d7		* auto
+	bne	内部関数あり
+
+ * global
+	movea.l	nest_work,a0
+	tst.l	(a0)
+	bne	nest_structure終わってない
+
+	move.w	d2,(a4)+		* 中間言語書き込み
+	bsr	global変数リスト作成
+	bra	@f
+
+内部関数あり:
+	bclr	#endfuncF,d7
+	beq	no_endfunc
+@@:
+
+
+
+
+
+ * 型を得る（省略なら int )
+	bsr	型get			* すでにわかっている（はず）
+
+	bsr	first_check_a5_in_line
+ * ハッシュ値を計算しながら、文字数を数える
+	bsr	hash
+ * a2.l = 元の対象の開始アドレス
+ * d4.l = (hash.w)(文字数-1)
+	tst.w	d4
+	bmi	sonnahazunai
+	bsr	function_check
+ * d0.w = ヒットした関数の返り値の型	( = 0 : 該当関数無し )
+ * d0.w < 0 の時
+ *	d1.w = 引き数の個数
+ *	d3.w = 0 から始まる関数番号	( < 0 : 内部関数 )
+ *	a2   = パラメーターテーブル
+	tst.w	d0
+	beq	sonnahazunai
+	not.w	d3
+	bmi	sonnahazunai
+
+	lsl.w	#4,d3
+	movea.l	内部関数buf,a3
+	adda.w	d3,a3
+	move.l	a4,$c(a3)		* 実行アドレス
+
+
+*	movem.l	変数INIT,a0/a1
+*	sub.l	a1,a0
+	move.w	8+変数INIT,d0
+	addq.w	#1,d0
+	add.w	d0,d0
+	move.w	d0,(a4)+	* 変数 area を初期化する時の参照するオフセット
+	move.w	8+引数INIT,d0
+	addq.w	#1,d0
+	add.w	d0,d0
+	move.w	d0,(a4)+	* 引き数を取り込む時、参照するオフセット
+
+*	movea.l	引数INIT,a1
+*	subq.w	#1,d1
+*	move.w	d1,(a1)+
+*	move.l	a1,引数INIT
+	pea.l	引数INIT
+	move.w	d1,d0
+	subq.w	#1,d0		* 引き数の個数 - 1
+	bsr	buf書込		* d1.w/a0-a1 破壊
+	addq.l	#4,sp
+
+
+
+
+	moveq	#-1,d0		* 登録された個数 - 1
+	move.w	d0,4+AUTOint
+	move.w	d0,4+AUTOstr
+	move.w	d0,4+AUTOchar
+	move.w	d0,4+AUTOfloat
+	move.w	d0,4+AUTO配列
+
+
+	cmpi.b	#'(',(a5)+
+	bne	sonnahazunai
+
+func_loop:
+	bsr	first_check_a5_in_line
+	move.w	(a2)+,d0
+	bge	@f
+	cmpi.w	#$8080,d0	* 拡張配列印
+	bne	func_loop_end
+@@:
+	move.l	a2,-(sp)
+	move.w	d0,-(sp)
+
+
+ * 引き数名のチェック
+	bsr	hash		* 引き数名
+	bsr	statement_check
+	tst.w	d0
+	bne	var_def_err
+
+ *		d4.l = * (hash.w)(文字数-1)
+ *		a2.l = 元の対象の開始アドレス
+	bsr	function_check
+ * d0.w = ヒットした関数の返り値の型	( = 0 : 該当関数無し )
+	tst.w	d0
+	bne	var_double_def_err	* 関数と同じ名前
+
+
+ * 他の変数名と重なってないかどうか
+ * 		d4.l = * (hash.w)(文字数-1)
+ * 		a2.l = 元の対象の開始アドレス
+ 	bsr	variable_check
+ * 重なってない		d2.l	= -1
+ * int の n 番と一致	d2.l	= n+0000	( n < システム変数 )
+ * str の n 番と一致	d2.l	= n+0100	( n < システム変数 )
+ * char の n 番と一致	d2.l	= n+0200
+ * float の n 番と一致	d2.l	= n+8000
+ * d2.l < 0 = 代入出来ない（当たりがない or system 変数)
+ * d0 =   0 : 普通の変数
+ *	  1 : 配列	（ a0 = その配列情報のポインタ ）
+ *	$80 : auto 変数
+ *	$81 : auto 配列	（ a0 = その配列情報のポインタ ）
+ *	 -1 : 当たりなし
+	bmi	@f		* 当たりなし、global のみのとき定義出来る
+	tst.b	d0
+	bmi	var_double_def_err
+
+@@:
+	move.w	(sp)+,d2		* 型
+	cmpi.w	#$8080,d2	* 拡張配列印
+	beq	2f
+	moveq	#$60,d0		* 配列印
+	and.w	d2,d0
+	beq	@f
+2:
+		bsr	配列引き数登録
+		bra	1f
+@@:
+		bsr	変数引き数登録
+1:
+
+	cmpi.b	#';',(a5)
+	bne	@f
+
+	addq.l	#1,a5
+	bsr	hash		* 変数の型だが、無視
+@@:
+	movea.l	(sp)+,a2
+
+	bsr	first_check_a5_in_line
+	addq.l	#1,a5
+	cmpi.b	#',',d0
+	beq	func_loop
+	cmpi.b	#')',d0
+	bne	sonnahazunai
+	move.w	(a2)+,d0
+	bge	sonnahazunai
+	bra	@f
+
+func_loop_end:
+	cmpi.b	#')',(a5)+
+	bne	sonnahazunai
+
+
+@@:
+	subi.w	#$8000,d0
+	beq	float_rt
+	subq.w	#1,d0
+	beq	int_rt
+	subq.w	#1,d0
+	beq	char_rt
+	subq.w	#1,d0
+	bne	sonnahazunai
+	moveq	#1,d0
+	bra	@f
+float_rt:
+	move.w	#$0080,d0
+	bra	@f
+char_rt:
+	moveq	#$0002,d0
+	bra	@f
+int_rt:
+@@:
+	move.w	d0,RETURNtype		 * d0 = 返り値の型
+
+	rts
+
+
+配列引き数登録:
+	move.w	d2,-(sp)
+	lea.l	AUTO配列,a0	* 当たり前だが auto
+	moveq	#5,d1		* 一項辺りのデータサイズ ( = 2^5 = 32 )
+	bsr	変数登録sub	* 配列登録 (d2= -変数番号) (d4もういらない）
+
+	move.w	(sp)+,d0	* 型
+	cmpi.w	#$8080,d0
+	bne	@f
+
+	movea.l	4(sp),a0	* 引き数情報ポインタ
+	move.w	(a0)+,d0	* 型＋次元-1
+	clr.w	d1
+	move.b	d0,d1
+	clr.b	d0
+	move.w	d1,d4
+	add.w	d4,d4
+	lea.l	4(a0,d4.w),a0
+	move.l	a0,4(sp)
+	bra	1f
+
+@@:
+	moveq	#0,d1	* 1-dim
+	btst	#6,d0
+	beq	@f
+	moveq	#1,d1	* 2-dim
+@@:
+	btst	#0,d0
+	bne	float引き数D
+	btst	#1,d0
+	bne	int引き数D
+	btst	#2,d0
+	bne	char引き数D
+	btst	#3,d0
+	bne	str引き数D
+	bra	sonnahazunai
+
+float引き数D:
+	move.w	#$8000,d0
+	bra	1f
+char引き数D:
+	move.w	#$0200,d0
+	bra	1f
+str引き数D:
+	move.w	#$0100,d0
+	bra	1f
+int引き数D:
+	move.w	#$0000,d0
+
+1:
+	move.w	d0,(a3)+	* 型
+	move.w	d1,(a3)+	* 次元 - 1
+	move.w	d1,-(sp)
+	subq.w	#1,d1
+	bcs	2f
+3:
+	cmpi.b	#',',(a5)+
+	bne	3b
+	clr.w	(a3)+		* 変数領域大きさ計算用に添字大きさクリア
+	dbra	d1,3b
+2:
+	clr.w	(a3)+		* 変数領域大きさ計算用に添字大きさクリア
+	cmpi.b	#')',(a5)+
+	bne	2b
+
+
+	move.w	(sp)+,d0	* とりあえず次元を書き込むことになっているが、
+				* 実は正の数なら何でも良い（7/5/3現在）
+	pea.l	引数INIT
+	bsr	buf書込		* d1.w/a0-a1 破壊
+	not.w	d2
+	move.w	d2,d0			* 変数番号
+	bsr	buf書込		* d1.w/a0-a1 破壊
+	addq.l	#4,sp
+	rts
+
+
+
+変数引き数登録:
+	btst	#0,d2
+	bne	float引き数
+	btst	#1,d2
+	bne	int引き数
+	btst	#2,d2
+	bne	char引き数
+	btst	#3,d2
+	bne	str引き数
+	bra	sonnahazunai
+
+float引き数:
+	lea.l	AUTOfloat,a0
+	move.w	#$8080,d0
+	bra	@f
+char引き数:
+	lea.l	AUTOchar,a0
+	move.w	#$8002,d0
+	bra	@f
+str引き数:
+	lea.l	AUTOstr,a0
+	move.w	#$8001,d0
+	bra	@f
+int引き数:
+	lea.l	AUTOint,a0
+	move.w	#$8000,d0
+
+@@:
+	move.w	d0,-(sp)
+	bsr	普通変数登録
+
+	move.w	(sp)+,d0		* 型
+	pea.l	引数INIT
+	bsr	buf書込		* d1.w/a0-a1 破壊
+	not.w	d2
+	move.w	d2,d0			* 変数番号
+	bsr	buf書込		* d1.w/a0-a1 破壊
+	addq.l	#4,sp
+	rts
+
+
+
+sonnahazunai:
+	ERROR	2
+nest_structure終わってない:
+	ERROR	42
+no_endfunc:
+	ERROR	43
+
+
+
+
+	.xdef	global変数リスト作成
+global変数リスト作成:
+	lea.l	変数int,a2
+	bra	@f
+
+auto変数リスト作成:
+	lea.l	AUTOint,a2
+@@:
+	move.w	8+変数INIT,-(sp)
+	pea.l	変数INIT
+
+	moveq	#0,d5		* 変数領域のサイズ
+	bsr	buf書込		* dummy
+	bsr	buf書込		* dummy
+
+	move.w	4+8*0(a2),d0		* intの型の変数の個数 - 1
+	move.w	d0,d1
+	addq.w	#1,d1
+	lsl.w	#2,d1
+	add.w	d1,d5
+	bsr	buf書込
+	move.w	4+8*1(a2),d0		* str
+	move.w	d0,d1
+	addq.w	#1,d1
+	lsl.w	#8,d1
+	add.w	d1,d5
+	bsr	buf書込
+	move.w	4+8*2(a2),d0		* char
+	move.w	d0,d1
+	addq.w	#1,d1
+	add.w	d1,d5
+	bsr	buf書込
+	move.w	4+8*3(a2),d0		* float
+	move.w	d0,d1
+	addq.w	#1,d1
+	lsl.w	#3,d1
+	add.w	d1,d5
+	bsr	buf書込
+
+	movea.l	0+8*4(a2),a3		* 配列まとめ
+	move.w	4+8*4(a2),d4
+
+	move.w	d4,d0
+	bsr	buf書込		* d1.w/a0-a1 破壊
+	tst.w	d4
+	bmi	変数INITdata処理終了
+	moveq	#変数個数,d3
+変数INITdata処理loop:
+	lea.l	8(a3),a2
+
+	move.w	(a2)+,d0		* 型（上位バイト）
+	move.w	(a2)+,d2		* 次元 - 1
+	move.b	d2,d0
+	ror.w	#8,d0			* 次元＋型
+	bsr	buf書込		* d1.w/a0-a1 破壊
+
+	moveq	#4,d1
+	tst.b	d0
+	beq	3f
+	bmi	2f
+	subq.b	#1,d0
+	beq	1f
+	moveq	#1,d1
+	bra	3f
+1:
+	move.w	#$100,d1	* 上位ワードはクリア済み
+	bra	3f
+2:
+	moveq	#8,d1
+3:
+
+@@:
+	moveq	#0,d0
+	move.w	(a2)+,d0	* 添え字の大きさ
+	move.l	d1,tmp		* 保存（スタックをいじれないから）
+	bsr	buf書込		* d1.w/a0-a1 破壊
+	move.l	tmp,d1
+	addq.l	#1,d0		* 要るはず
+	FPACK	__LMUL
+	move.l	d0,d1
+	dbra	d2,@b
+	add.l	d1,d5
+
+	lea.l	$20(a3),a3
+	subq.w	#1,d3
+	dbeq	d4,変数INITdata処理loop
+	bne	変数INITdata処理終了
+	moveq	#変数個数,d3
+	movea.l	(a3),a3
+	dbra	d4,変数INITdata処理loop
+
+変数INITdata処理終了:
+*	move.l	a0,変数INIT
+	addq.l	#4,sp
+
+	move.w	(sp)+,d1
+	move.l	d5,d2		* この関数ブロックで使用する変数領域の大きさ
+
+	movea.l	4+変数INIT,a3
+	swap	d2
+	addq.w	#1,d1
+	bsr	bufput
+	swap	d2
+	addq.w	#1,d1
+	bsr	bufput
+
+	rts
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+**	**	**
+ *	ネスト構造を持つステートメントの処理
+
+
+
+ * nest 登録
+ * d2.w = 登録する種類
+ *	$0000 = for
+ *	$ffff = while
+ *	$0001 = switch
+ *	$0011 = switch (default の後)
+ *	$0002 = repeat
+ *	$0003 = if
+ *	$0004 = switch(str)
+ *	$0014 = switch(str) (default の後)
+nest登録:
+ *	a3 = 書き込みアドレス
+	movea.l	nest_work,a3
+	move.l	(a3),d0
+	beq	@f
+	exg	a3,d0		* a3 = 今のブロックのポインタ
+				* d0 = 前のブロックのポインタ ( first block なら 0 )
+@@:
+	move.l	a3,nest_work
+	addq.l	#4,a3		* つぎ
+	move.l	d0,(a3)+	* まえ
+	move.w	d2,(a3)+	* 種類
+	rts
+
+ * nest 
+nest削除:
+	movea.l	nest_work,a0
+	tst.l	4(a0)
+	beq	@f
+	move.l	4(a0),nest_work		* 前のブロックを指すアドレス
+	rts
+@@:
+	clr.l	(a0)
+	rts
+
+
+
+
+
+
+
+Switch:
+	move.w	d2,(a4)+	* 中間言語書き込み
+
+	movea.l	a4,a3
+	moveq	#-1,d2
+	bsr	math解釈
+ *	return  d6.w	= 変数の型(d2=ffff 以外なら d2.l を保存）
+ * int		d6.w	= 0000
+ * str		d6.w	= 0100
+ * char 	d6.w	= 0200
+ * float	d6.w	= 8000
+
+	moveq	#1,d2
+ *	$0001 = switch
+	cmpi.w	#$0100,d6		* str
+	bne	@f
+
+Switch2:
+	move.w	#13*2,-2(a4)	* 中間言語書き込み $$$13='Endswitch'='Switch2'
+	moveq	#4,d2
+ *	$0004 = switch(str)
+
+@@:
+	movea.l	a3,a4
+ * nest 登録
+ * d2.w = 登録する種類
+	bsr	nest登録
+ *	a3 = 書き込みアドレス
+
+	move.l	a4,(a3)+	* 飛び先を書くアドレス ( case default のリストがあるんだよ )
+	addq.l	#4,a4
+
+	movea.l	nest_work,a0	* ネストものの終わりの決まり文句
+	move.l	a3,(a0)
+
+	rts
+
+
+
+
+
+Case:
+	movea.l	nest_work,a0
+	move.l	(a0),d0
+	beq	no_nest_structure
+
+	movea.l	d0,a3
+	move.l	a4,d0
+	bset	#$1d,d0		* CASE :
+	move.l	d0,(a3)+	* case address
+
+ *	$0001 = switch
+ *	$0004 = switch(str)
+	move.w	8(a0),d1
+	subq.w	#1,d1
+	beq	@f
+	subq.w	#3,d1
+	beq	Case2
+	bra	no_switch
+@@:
+	bsr	int定数get
+	move.l	d0,(a3)+	* case value
+
+	movea.l	nest_work,a0	* ネストものの終わりの決まり文句
+	move.l	a3,(a0)
+	rts
+
+ * 文字列用
+Case2:
+	moveq	#-1,d1
+	cmpi.b	#'"',(a5)+
+	bne	case_str_err
+	move.l	a3,-(sp)
+	addq.l	#2,a3
+@@:
+	move.b	(a5)+,d0
+	cmpi.b	#'"',d0
+	bhi	1f
+	beq	2f
+	cmpi.b	#$20,d0
+	bcs	case_str_err
+1:
+	move.b	d0,(a3)+
+	addq.w	#1,d1
+	bra	@b
+2:
+	clr.b	(a3)+		* 文字列終
+	clr.b	(a3)+
+	move.l	a3,d0
+	bclr	#0,d0
+	move.l	(sp)+,a3
+	move.w	d1,(a3)		* 文字列長さ - 1
+
+	movea.l	nest_work,a0	* ネストものの終わりの決まり文句
+	move.l	d0,(a0)
+
+	rts
+
+
+
+
+Default:
+	movea.l	nest_work,a0
+	move.l	(a0),d0
+	beq	no_nest_structure
+ *	$0001 = switch
+ *	$0004 = switch(str)
+	move.w	8(a0),d1
+	subq.w	#1,d1
+	beq	@f
+	subq.w	#3,d1
+	bne	no_switch
+@@:
+
+	movea.l	d0,a3
+	move.l	a4,d0
+	clr.l	(a3)+		* default
+	move.l	d0,(a3)+	* default address
+
+	move.l	a3,(a0)		* ネストバッファの終端を登録
+
+	rts
+
+
+
+
+	.xdef	Endswitch
+Endswitch:
+	moveq	#8*2,d2		* 'break'$$$
+	bsr	Break
+
+	movea.l	nest_work,a0
+	move.l	(a0),d2			* last address
+	beq	no_nest_structure
+	addq.l	#8,a0
+
+ *	$0001 = switch
+ *	$0004 = switch(str)
+	move.w	(a0)+,d5
+	subq.w	#1,d5
+	beq	@f
+	cmpi.w	#3,d5
+	bne	no_switch
+@@:
+ * d5 = 0	int
+ * d5 = 3	str
+
+	move.l	a4,d0
+	move.l	(a0)+,a3	* switch から 'menu' に飛ぶアドレスを書く所
+	bsr	address書き込みa3
+
+
+	move.l	a4,a2		* case の個数置き用アドレス保存
+	addq.l	#2,a4
+	moveq	#0,d3		* case の個数カウンタ (最上位BIT = default の後 flag)
+	clr.l	-(sp)		* break 用 '番人'
+endsw_loop:
+	cmpa.l	d2,a0
+	bcc	endsw_loop_end
+
+	move.l	(a0)+,d0	* address ( <0:cont. ,  =0:default )
+	bmi	cont_in_switch	* continue : あるはずない（if 内から払い下げとか）
+	beq	es_default
+	bclr	#$1d,d0		* CASE :
+	bne	es_case
+
+ * break
+	move.l	d0,-(sp)
+	bra	endsw_loop
+
+
+es_case:
+	addq.l	#1,d3
+	bmi	after_default
+*	move.w	#$0001,(a4)+	* case
+	tst.w	d5
+	bne	es_case_str
+	move.l	(a0)+,(a4)+	* case value
+	bsr	address書き込み
+	bra	endsw_loop
+
+es_case_str:
+	move.w	(a0)+,d1	* 文字列長さ - 1
+	move.w	d1,(a4)+
+	addq.w	#1,d1
+	lsr.w	#1,d1
+@@:
+	move.w	(a0)+,(a4)+
+	dbra	d1,@b
+	bsr	address書き込み
+	bra	endsw_loop
+
+
+es_default:
+	bset	#31,d3
+	bne	after_default
+	move.l	(a0)+,d0	* default address
+*	move.w	#$ffff,(a4)+	* default
+	bsr	address書き込み
+	bra	endsw_loop
+
+
+endsw_loop_end:
+*	clr.w	(a4)+		* switch 終わりだ
+	subq.w	#1,d3
+	bcs	no_case
+	move.w	d3,(a2)		* case の個数 - 1
+	tst.l	d3
+	bmi	@f
+	moveq	#4,d0
+	move.l	d0,(a4)+	* default 無かった時、飛び先をendswitch の後に
+@@:
+	move.l	(sp)+,d0	* break address
+	beq	@f
+	movea.l	d0,a3
+	move.l	a4,d0
+	bsr	address書き込みa3	* 各 case の後などにある break の飛び先を書く
+	bra	@b
+
+@@:
+	bsr	nest削除
+
+	rts
+
+
+
+no_switch:
+	ERROR	47
+after_default:
+	ERROR	61
+case_str_err:
+	ERROR	31	* 式の型が違う
+no_case:
+	ERROR	48
+
+
+
+
+
+Break:
+	move.w	d2,(a4)+	* 中間言語書き込み
+
+	movea.l	nest_work,a0
+	move.l	(a0),d0
+	beq	no_nest_structure
+	movea.l	d0,a3
+	move.l	a4,(a3)+
+	move.l	a3,(a0)
+	addq.l	#4,a4
+	rts
+
+
+Continue:
+	move.w	d2,(a4)+	* 中間言語書き込み
+
+	movea.l	nest_work,a0
+	move.l	(a0),d0
+	beq	no_nest_structure
+
+	move.w	8(a0),d1
+	cmpi.w	#1,d1			* 種類(switch)
+	beq	cont_in_switch
+	cmpi.w	#$11,d1			* 種類(switch)
+	beq	cont_in_switch
+
+	movea.l	d0,a3
+	move.l	a4,d0
+	neg.l	d0
+	move.l	d0,(a3)+
+	move.l	a3,(a0)
+	addq.l	#4,a4
+	rts
+
+cont_in_switch:
+	ERROR	46
+no_nest_structure:
+	ERROR	28
+
+
+
+	.xdef	If
+If:
+	move.w	d2,(a4)+	* 中間言語書き込み
+
+	movea.l	a4,a3
+	moveq	#0,d2
+ * 解釈した結果を (a3) からに書き込み、その長さを d0.l に返す
+ * int		d2.w	= 0000
+	bsr	math解釈
+ *	return  d6.w	= 変数の型(d2=ffff 以外なら d2.l を保存）
+
+	tst.w	(a4)		* =0 ... int演算子
+	bne	1f
+	move.w	2(a4),d2
+	subi.w	#9*2,d2		* 9-14 : 関係演算子
+	bcs	1f
+	cmpi.w	#6*2,d2
+	bcc	1f
+	tst.b	4+1(a4)		* int 型
+	bne	1f
+	addi.w	#42*2,d2
+	move.w	d2,-2(a4)	* 中間言語書き込み $$$(42-47)
+
+	lsr.w	#1,d0
+	subq.w	#2+1,d0
+@@:
+	move.w	4(a4),(a4)+
+	dbra	d0,@b
+	bra	2f
+
+1:
+	movea.l	a3,a4
+2:
+	moveq	#3,d2
+ * nest 登録
+ * d2.w = 登録する種類
+ *	$0003 = if
+	bsr	nest登録
+ *	a3 = 書き込みアドレス
+
+	lea.l	_then(pc),a2
+	bsr	one_check
+	bmi	err_if
+
+	bsr	first_check_a5_in_line
+
+	moveq	#0,d0
+	cmpi.b	#'{',(a5)
+	bne	@f
+	moveq	#1,d0		* then_block_flag on
+	addq.l	#1,a5
+@@:
+	move.w	d0,(a3)+	* flag
+	move.l	a4,(a3)+	* label 1 を書くアドレス
+	addq.l	#4,a4
+
+	movea.l	nest_work,a0	* ネストものの終わりの決まり文句
+	move.l	a3,(a0)
+
+	move.b	#':',-(a5)	** 姑息！ **
+
+	rts
+
+
+_then:
+	.dc.b	'then',0,0
+
+
+
+err_if:
+	ERROR	30
+Then:
+Else0:
+	ERROR	29	* not exist 'if'
+
+
+
+	.xdef	Else
+Else:
+*	move.w	d2,(a4)+	* 中間言語書き込み
+	move.w	#40*2,(a4)+	* 中間言語書き込み 'else'$$$
+
+	movea.l	nest_work,a0
+	move.l	(a0),d0
+	beq	Else0		* ネストバッファ空っぽ (村重さん)
+	addq.l	#8,a0
+	cmpi.w	#3,(a0)+		* 種類
+	bne	Else0
+
+	tst.w	(a0)
+	bne	Else0	* else 二重に使うなんて！ or
+			* '{' に対応する '}' がないよ  thanks for 村重さん (H8/2/1)
+
+	bsr	first_check_a5_in_line
+ * 数字なら			d0 = 0
+ * 行の終わりなら		d0 = -1
+ * その他なら			d0 = そのキャラクタ
+	moveq	#2,d1		* else
+	cmpi.b	#'{',d0
+	bne	@f
+	moveq	#3,d1		* else_block_flag on
+	addq.l	#1,a5
+@@:
+	move.w	d1,(a0)+		* flag
+
+	move.l	a4,d1		* label 2 を書くアドレス
+	movea.l	(a0),a4		* label 1 を書くアドレス
+	move.l	d1,d0
+	addq.l	#4,d0		* label 1
+	bsr	address書き込み
+
+	movea.l	d1,a4
+	addq.l	#4,a4		* label 1
+	move.l	d1,(a0)		* label 2 を書くアドレス
+
+
+	move.b	#':',-(a5)	** 姑息！ **
+	rts
+
+
+
+
+	.xdef	If_end
+If_end:
+	movea.l	nest_work,a0
+	movea.l	a0,a3
+
+	move.l	(a0)+,d2	* 次のブロックアドレス（このブロックの最終アドレス）
+	move.l	(a0)+,-(sp)	* 前のブロックのアドレス
+
+	cmpi.w	#3,(a0)+	* if
+	bne	Else0
+	addq.l	#2,a0
+
+	move.l	a4,d1	* 保存
+	move.l	a4,d0	* 飛び先
+	movea.l	(a0)+,a4	* label ? を書くアドレス
+	bsr	address書き込み
+	movea.l	d1,a4	* 復活
+
+	sub.l	a0,d2
+	beq	If_end_end
+
+	lsr.w	#2,d2
+	subq.w	#1,d2
+@@:
+	move.l	(a0)+,(a3)+		* break,continue の上のネストへの引き継ぎ
+	dbra	d2,@b
+
+If_end_end:
+	move.l	(sp)+,d0
+	beq	@f
+	move.l	d0,nest_work		* 前のブロックのアドレス
+	movea.l	d0,a0	* ネストものの終わりの決まり文句
+	move.l	a3,(a0)
+	rts
+
+@@:
+	move.l	nest_work,a0
+	clr.l	(a0)		* ネスト構造無し
+	rts
+
+
+
+
+
+
+
+
+	.xdef	While
+While:
+	move.w	d2,(a4)+	* 中間言語書き込み
+
+	moveq	#-1,d2
+ * nest 登録
+ * d2.w = 登録する種類
+ *	$ffff = while
+	bsr	nest登録
+ *	a3 = 書き込みアドレス
+
+
+	move.l	a3,-(sp)
+	addq.l	#2,a3		* 長さ
+
+ * 式 解釈
+	moveq	#0,d2
+ * int		d2.w	= 0000
+	bsr	math解釈
+ *	return  d6.w	= 変数の型(d2=ffff 以外なら d2.l を保存）
+	move.l	(sp)+,a3
+
+	lsr.w	#1,d0
+	subq.w	#1,d0
+	move.w	d0,(a3)+	* 長さ / 2 - 1
+@@:
+	move.w	(a3)+,(a4)+	* 式 コピー
+	dbra	d0,@b
+
+	addq.l	#4,a4
+	move.l	a4,(a3)+	* label 2	( loop address )
+	lea.l	-4(a4),a0
+	move.l	a0,(a3)+	* label 1 を書くアドレス	( break address )
+
+	movea.l	nest_work,a0
+	move.l	a3,(a0)
+
+	rts
+
+
+
+
+
+For:
+	move.w	d2,(a4)+	* 中間言語書き込み
+
+	moveq	#0,d2
+ * nest 登録
+ * d2.w = 登録する種類
+ *	$0000 = for
+ *	$ffff = while
+ *	$0001 = switch
+ *	$0002 = repeat
+ *	$0003 = if
+	bsr	nest登録
+ *	a3 = 書き込みアドレス
+
+	bsr	hash
+ * a2.l = 元の対象の開始アドレス
+ * d4.l = (hash.w)(文字数-1)
+ * d1.b = お次の文字 (  (,[,=,:, , etc... )
+	tst.w	d4
+	bmi	err_for
+ * 		d4.l = * (hash.w)(文字数-1)
+ * 		a2.l = 元の対象の開始アドレス
+	move.l	a3,-(sp)
+ 	bsr	variable_check
+ * 重なってない		d2.l	= -1
+ * int の n 番と一致	d2.l	= n+0000	( n < システム変数 )
+ * d2.l < 0 = 代入出来ない（当たりがない or system 変数)
+ * d0 =   0 : 普通の変数
+ *	  1 : 配列	（ a0 = その配列情報のポインタ , d1 = 添え字の最大数 ）
+ *	$80 : auto 変数
+ *	$81 : auto 配列	（ a0 = その配列情報のポインタ , d1 = 添え字の最大数 ）
+ *	 -1 : 当たりなし
+	bge	@f
+	bsr	未宣言をint_sub
+	bra	for_1
+
+@@:
+	tst.l	d2
+	bmi	misengen_var		* システム変数も含む
+
+	tst.w	d2		* $0000 = int
+	bne	型違い
+
+	tst.b	d0
+	bge	for_1
+	swap	d2
+	not.w	d2		* AUTO 変数
+	swap	d2
+for_1:
+	move.l	(sp)+,a3
+
+	cmpi.b	#'=',(a5)+
+	bne	err_for
+
+ * 式１解釈
+	move.l	a3,-(sp)
+	movea.l	a4,a3
+ * 解釈した結果を (a3) からに書き込み、その長さを d0.l に返す
+ * int		d2.w	= 0000
+	bsr	math解釈
+ *	return  d6.w	= 変数の型(d2=ffff 以外なら d2.l を保存）
+
+	movea.l	a3,a4
+	move.l	(sp)+,a3
+
+	swap	d6		* 変数番号
+	move.w	d6,(a4)+		* 中間言語書き込み
+
+
+	bsr	first_check_a5_in_line
+ * 数字なら			d0 = 0
+ * 行の終わりなら		d0 = -1
+ * その他なら			d0 = そのキャラクタ
+	tst.w	d0
+	ble	err_for
+	cmpi.b	#'t',(a5)+
+	bne	err_for
+	cmpi.b	#'o',(a5)+
+	bne	err_for
+
+
+
+	move.l	a3,-(sp)
+	addq.l	#2,a3		* 長さ
+	move.w	d6,(a3)+	* int 変数番号
+
+	movea.l	a4,a3
+ * 式２解釈
+	moveq	#0,d2
+ * int		d2.w	= 0000
+	bsr	math解釈
+ *	return  d6.w	= 変数の型(d2=ffff 以外なら d2.l を保存）
+	move.l	(sp)+,a3
+
+	cmpi.w	#$8000,(a4)	* int 定数
+	beq	next2
+
+	lsr.w	#1,d0
+	move.w	d0,(a3)		* 長さ / 2
+	addq.l	#4,a3
+	subq.w	#1,d0		* 長さ / 2 - 1
+@@:
+	move.w	(a4)+,(a3)+	* 式２コピー
+	dbra	d0,@b
+	bra	for_3
+
+next2:			* 終値が定数の時は特別
+	clr.w	(a3)		* 長さ = 0 が特別の印
+	addq.l	#4,a3
+	addq.l	#2,a4
+	move.l	(a4)+,(a3)+	* 式２(ロングワード定数)コピー
+
+
+for_3:
+	movea.l	a4,a0
+	addq.l	#4,a4
+	move.l	a4,(a3)+	* label 2	( loop address )
+	move.l	a0,(a3)+	* label 1 を書くアドレス	( break address )
+
+
+	movea.l	nest_work,a0
+	move.l	a3,(a0)
+
+	rts
+
+
+
+
+
+
+misengen_var:
+	ERRORS	7
+型違い:
+	ERRORS	26
+err_for:
+	ERROR	25	* for
+
+
+
+
+
+Repeat:
+	moveq	#2,d2
+ * nest 登録
+ * d2.w = 登録する種類
+ *	$0002 = repeat
+	bsr	nest登録
+ *	a3 = 書き込みアドレス
+
+	move.l	a4,(a3)+	* label 2	( loop address )
+
+	movea.l	nest_work,a0
+	move.l	a3,(a0)
+
+	rts
+
+
+
+
+Until:
+	move.l	a4,d3			* label 3 (continue address)
+
+	move.w	d2,(a4)+	* 中間言語書き込み
+	movea.l	nest_work,a3
+	move.l	(a3),d2			* 末尾アドレス
+	beq	repeatない		* H8/2/1 thanks for 村重さん
+	addq.l	#8,a3
+	cmpi.w	#2,(a3)+
+	bne	repeatない
+
+ * 式１解釈
+
+	movem.l	d2/d3/a3,-(sp)
+	movea.l	a4,a3
+	moveq	#0,d2
+ * 解釈した結果を (a3) からに書き込み、その長さを d0.l に返す
+ * int		d2.w	= 0000
+	bsr	math解釈
+ *	return  d6.w	= 変数の型(d2=ffff 以外なら d2.l を保存）
+
+	movea.l	a3,a4
+	movem.l	(sp)+,d2/d3/a3
+
+
+	bra	Next飛込2
+
+
+
+
+repeatない:
+	ERROR	33
+
+
+
+
+Endwhile:
+	move.l	a4,d3			* label 3 (continue address)
+
+	move.w	d2,(a4)+	* 中間言語書き込み
+	movea.l	nest_work,a3
+	move.l	(a3),d2			* 末尾アドレス
+	beq	whileない		* H8/2/1 thanks for 村重さん
+	addq.l	#8,a3
+	cmpi.w	#$ffff,(a3)+
+	beq	Next飛込
+whileない:
+	ERROR	32
+
+
+
+Next:
+	move.l	a4,d3			* label 3 (continue address)
+
+	move.w	d2,(a4)+	* 中間言語書き込み
+	movea.l	nest_work,a3
+	move.l	(a3),d2			* 末尾アドレス
+	beq	forない			* H8/2/1 thanks for 村重さん
+	addq.l	#8,a3
+	tst.w	(a3)+
+	bne	forない
+Next飛込:		* Endwhile と（ほぼ）共通の処理
+	move.w	(a3)+,d0	* 式の長さ
+	beq	Next特別
+@@:
+	move.w	(a3)+,(a4)+	* (変数番号、)式 コピー
+	dbra	d0,@b
+	bra	Next飛込2
+Next特別:
+	addq.w	#1*2,-2(a4)	* statement #$$$ = 'Next2' 終値定数用
+	move.w	(a3)+,(a4)+	* 変数番号
+	move.l	(a3)+,(a4)+	* 式 コピー
+
+Next飛込2:
+	move.l	(a3)+,d0		* loop address
+	bsr	address書き込み
+	move.l	a4,d1			* label 1 (break address)
+
+	sub.l	a3,d2
+	lsr.w	#2,d2
+	subq.w	#1,d2
+	bcs	next_out
+next_loop:
+	move.l	(a3)+,d0
+	bge	next_label1
+ * label 3
+	neg.l	d0
+	movea.l	d0,a4
+	move.l	d3,d0
+	bra	@f
+next_label1:
+	movea.l	d0,a4
+	move.l	d1,d0
+@@:
+	bsr	address書き込み
+
+	dbra	d2,next_loop
+next_out:
+	bsr	nest削除
+	movea.l	d1,a4
+	rts
+
+
+
+
+address書き込み:
+	sub.l	a4,d0
+	move.l	d0,(a4)+
+	rts
+address書き込みa3:
+	sub.l	a3,d0
+	move.l	d0,(a3)+
+	rts
+
+forない:
+	ERROR	27
+
+
+
+
+**	**	**
+
+Error:
+	move.w	d2,(a4)+	* 中間言語書き込み
+	cmpi.b	#'o',(a5)+
+	bne	bunpo_err	* 手抜き
+	move.b	(a5)+,d0
+	cmpi.b	#'n',d0
+	beq	@f
+	cmpi.b	#'f',d0
+	bne	bunpo_err	* 手抜き
+	cmpi.b	#'f',(a5)+
+	bne	bunpo_err	* 手抜き
+	clr.w	(a4)+
+	rts
+@@:
+	move.w	#-1,(a4)+
+	rts
+
+bunpo_err:
+	ERROR	4
+
+
+Beep:
+Cls:
+End:
+Stop:
+	move.w	d2,(a4)+	* 中間言語書き込み
+	rts
+
+
+Exit:
+	cmpi.b	#'(',(a5)+
+	bne	exit_err
+
+	bsr	first_check_a5_in_line
+	cmpi.b	#')',d0
+	beq	no_exitcode
+
+	move.w	d2,(a4)+	* 中間言語書き込み
+
+	moveq	#0,d2
+	movea.l	a4,a3
+ * int		d2.w	= 0000
+	bsr	math解釈
+	movea.l	a3,a4
+
+	cmpi.b	#')',(a5)+
+	bne	exit_err
+	rts
+
+no_exitcode:
+	addq.l	#1,a5
+	move.w	#19*2,(a4)+	* 中間言語書き込み (end) $$$
+	rts
+
+exit_err:
+	ERROR	62
+
+
+
+**	**	**
+
+
+Key:
+	bsr	fnc書替sub
+	move.w	d2,(a4)+	* 中間言語書き込み
+	movea.l	a4,a3
+	moveq	#0,d2		* int
+	bsr	math解釈
+	cmpi.b	#',',(a5)+
+	bne	key_err
+	move.w	#$0100,d2	* str
+	bsr	math解釈
+	movea.l	a3,a4
+	rts
+key_err:
+	ERROR	63
+
+
+Color:
+	bsr	first_check_a5_in_line
+ * 数字なら			d0 = 0
+ * 行の終わりなら		d0 = -1
+ * その他なら			d0 = そのキャラクタ
+	cmpi.b	#'[',d0
+	beq	Color_Palet
+Width:
+	move.w	d2,(a4)+	* 中間言語書き込み
+	moveq	#1-1,d2
+	bsr	d2_int_para
+	rts
+
+
+Color_Palet:
+	move.w	#35*2,(a4)+	* 中間言語書き込み 35= 'color[' $$$
+	moveq	#4-1,d2
+	addq.l	#1,a5
+	bra	@f
+Color_Palet_loop:
+	bsr	first_check_a5_in_line
+	cmpi.b	#',',d0
+	bne	@f
+	addq.l	#1,a5
+@@:
+	bsr	first_check_a5_in_line
+	cmpi.b	#',',d0
+	beq	CP値無し
+	cmpi.b	#']',d0
+	bne	@f
+CP値無し:
+	move.w	#-1,(a4)+
+	bra	Color_Palet_cont
+@@:
+	clr.w	(a4)+		* 値あり
+	move.w	d2,-(sp)
+	moveq	#0,d2
+	movea.l	a4,a3
+	bsr	math解釈
+	movea.l	a3,a4
+	move.w	(sp)+,d2
+Color_Palet_cont:
+	dbra	d2,Color_Palet_loop
+	cmpi.b	#']',(a5)+
+	bne	cp_err
+	rts
+cp_err:
+	ERROR	23
+
+
+Console:
+	cmpi.b	#',',(a5)
+	beq	Console_para12_略
+
+	lea.l	tmp,a3
+	move.w	d2,(a3)+	* 中間言語書き込み
+	moveq	#0,d2
+	bsr	math解釈
+
+	cmpi.b	#',',(a5)+
+	bne	Console_para_err
+	moveq	#0,d2
+	bsr	math解釈
+
+	move.l	a3,-(sp)
+	bsr	Console_func
+	move.l	(sp)+,d0
+
+	lea.l	tmp,a0		* 第１・２パラメータを後から書き込む
+	sub.l	a0,d0
+	lsr.w	#1,d0
+	subq.w	#1,d0
+@@:
+	move.w	(a0)+,(a4)+
+	dbra	d0,@b
+	rts
+
+
+Console_para12_略:
+	addq.l	#1,a5
+	bsr	first_check_a5_in_line
+Console_func:
+	cmpi.b	#',',(a5)+
+	bne	Console_para_err
+
+	move.w	#36*2,(a4)+	* 中間言語書き込み 36= 'function on/off' $$$
+	moveq	#1-1,d2
+	bsr	d2_int_para
+	rts
+
+Console_para_err:
+	ERROR	53
+
+
+Screen:
+	move.w	d2,(a4)+	* 中間言語書き込み
+	moveq	#4-1,d2
+	bsr	d2_int_para
+	rts
+
+
+Locate:
+	cmpi.b	#',',(a5)
+	beq	cursorSWのみ
+
+	move.w	d2,(a4)+	* 中間言語書き込み
+	moveq	#2-1,d2
+	bsr	d2_int_para
+	cmpi.b	#',',(a5)
+	beq	cursorSW
+	rts
+
+
+cursorSWのみ:
+	addq.l	#1,a5
+	bsr	first_check_a5_in_line
+	cmpi.b	#',',d0
+	bne	para変
+cursorSW:
+	addq.l	#1,a5
+	move.w	#37*2,(a4)+		* CursorSW $$$
+
+	moveq	#0,d2
+	movea.l	a4,a3
+	bsr	math解釈
+	movea.l	a3,a4
+	rts
+
+
+
+
+
+dip_loop:
+	cmpi.b	#',',(a5)+
+	bne	para変
+
+d2_int_para:
+	move.w	d2,-(sp)
+
+	moveq	#0,d2
+	movea.l	a4,a3
+ * 解釈した結果を (a3) からに書き込み、その長さを d0.l に返す
+ * int		d2.w	= 0000
+	bsr	math解釈
+ *	return  d6.w	= 変数の型(d2=ffff 以外なら d2.l を保存）
+ * int		d6.w	= 0000
+	movea.l	a3,a4
+
+	move.w	(sp)+,d2
+	dbra	d2,dip_loop
+	rts
+
+para変:
+	ERROR	22
+
+
+
+
+
+
+
+
+
+
+**	**	**
+
+
+
+
+
+
+CrLfEnd		equ	0
+NoCrLfEnd	equ	2
+TabJump		equ	4
+UsingNum	equ	6
+UsingStr	equ	8
+
+	.xdef	Lprint
+Lprint:
+Print:
+	move.w	d2,(a4)+	* 中間言語書き込み
+
+	bsr	first_check_a5_in_line
+	lea.l	_using(pc),a2
+	bsr	one_check
+	beq	PrintUsing
+
+pr_loop:
+	bsr	first_check_a5_in_line
+ * 数字なら			d0 = 0
+ * 行の終わりなら		d0 = -1
+ * その他なら			d0 = そのキャラクタ
+	tst.b	d0
+	bmi	pr_crlf_end
+	beq	pr_main
+	cmpi.b	#'}',d0
+	beq	pr_crlf_end
+	cmpi.b	#':',d0
+	bhi	pr_0
+	beq	pr_crlf_end
+	cmpi.b	#'/',d0
+	bne	@f
+	cmpi.b	#'*',1(a5)
+	beq	pr_crlf_end
+@@:
+	cmpi.b	#',',d0
+	beq	pr_1
+	bra	pr_main
+
+pr_0:
+	cmpi.b	#';',d0
+	beq	pr_2
+
+ * else があるかどうかチェック
+ * eq = ある , ne = ない
+	bsr	else_check
+	beq	pr_crlf_end
+
+
+pr_main:
+	moveq	#-1,d2
+	lea.l	2(a4),a3
+ * 解釈した結果を (a3) からに書き込み、その長さを d0.l に返す
+ * 型未判明	d2.w	= ffff
+	bsr	math解釈
+ *	return  d6.w	= 変数の型(d2=ffff 以外なら d2.l を保存）
+ * int		d6.w	= 0000
+ * str		d6.w	= 0100
+ * char 	d6.w	= 0200
+ * float	d6.w	= 8000
+
+	lsr.w	#8,d6
+	bset	#15,d6		* 代入式の印、下位バイトは変数の型
+	move.w	d6,(a4)+		* 中間言語書き込み
+	add.l	d0,a4
+
+	bra	pr_loop
+
+pr_1:				* ','
+	move.w	#TabJump,(a4)+
+
+pr_2:				* ';'
+	addq.l	#1,a5
+	bsr	first_check_a5_in_line
+ * 数字なら			d0 = 0
+ * 行の終わりなら		d0 = -1
+ * その他なら			d0 = そのキャラクタ
+	tst.w	d0
+	bmi	pr_not_crlf_end
+	cmpi.b	#':',d0
+	beq	pr_not_crlf_end
+	cmpi.b	#'}',d0
+	beq	pr_not_crlf_end
+	cmpi.b	#'/',d0
+	bne	@f
+	cmpi.b	#'*',1(a5)
+	beq	pr_not_crlf_end
+@@:
+ * else があるかどうかチェック
+ * eq = ある , ne = ない
+	bsr	else_check
+	beq	pr_not_crlf_end
+	bra	pr_loop
+
+pr_not_crlf_end:
+	move.w	#NoCrLfEnd,(a4)+
+	rts
+pr_crlf_end:
+*	move.w	#CrLfEnd,(a4)+
+	clr.w	(a4)+
+	rts
+
+
+
+
+PrintUsing:
+	bsr	first_check_a5_in_line
+	cmpi.b	#'"',(a5)+
+	bne	using_format_err
+	movea.l	a5,a2			* 引き数のフォーマット
+@@:
+	move.b	(a5)+,d0
+	beq	using_format_err
+	cmpi.b	#$a,d0
+	beq	using_format_err
+	cmpi.b	#'"',d0
+	bne	@b
+
+	moveq	#';',d2		* 最初の引き数の区切り記号
+
+
+us_loop:
+	bsr	us_sub
+	move.w	_us(pc,d1.w),d1
+	jmp	_us(pc,d1.w)
+*	.dc.b	'_"#.+\*!&@',0
+_us:
+	.dc.w	us_mes-_us
+	.dc.w	us_tosi-_us
+	.dc.w	us_loop_end-_us
+	.dc.w	us_num-_us
+	.dc.w	us_period-_us
+	.dc.w	us_plus-_us
+	.dc.w	us_yen-_us
+	.dc.w	us_ast-_us
+	.dc.w	us_str1-_us
+	.dc.w	us_str-_us
+	.dc.w	us_str_all-_us
+
+us_tosi:
+	move.b	(a2)+,d0	* 素通し
+	cmpi.b	#'"',d0
+	beq	using_format_err
+	cmpi.b	#$20,d0
+	bcs	using_format_err
+
+
+ * 普通の文字列の部分
+us_mes:
+	move.w	#$8001,(a4)+		* str 型
+	move.w	#$8001,(a4)+		* 定数
+us_mes_loop:
+	move.b	d0,(a4)+
+	bsr	us_sub
+	subq.w	#2,d1
+	bcs	us_mes_loop
+	beq	us_素通し	* d1 = '_'
+ * 何かのフォーマットがあっただ
+	bsr	a4word境界		* 文字列の後始末
+	subq.l	#1,a2
+	bra	us_loop
+us_素通し:
+	move.b	(a2)+,d0
+	cmpi.b	#'"',d0
+	beq	using_format_err
+	cmpi.b	#$20,d0
+	bcc	us_mes_loop
+	bra	using_format_err
+
+
+us_str1:
+	moveq	#1-1,d0
+	bra	us_str0
+
+us_str:
+	moveq	#1-1,d0
+@@:
+	addq.w	#1,d0
+	cmpi.b	#$20,(a2)+
+	beq	@b
+	cmpi.b	#'&',-1(a2)
+	bne	using_format_err
+us_str0:
+	cmp.b	(a5)+,d2
+	bne	using_format_err0
+	move.w	#UsingStr,(a4)+		* 中間言語書き込み = 8
+	move.w	d0,-(sp)
+	bsr	us_str_sub
+	move.w	(sp)+,(a4)+		* 長さ
+	bra	us_loop
+
+us_str_all:
+	cmp.b	(a5)+,d2
+	bne	using_format_err0
+	move.w	#$8001,(a4)+		* str型の意
+	bsr	us_str_sub
+	bra	us_loop
+
+us_str_sub:
+	movea.l	a4,a3
+	move.w	#$0100,d2
+	move.l	a2,-(sp)
+	bsr	math解釈
+	move.l	(sp)+,a2
+	moveq	#',',d2		* 次の引き数の区切り記号
+	movea.l	a3,a4
+	rts
+
+
+us_ast:
+	cmpi.b	#'*',(a2)+
+	bne	using_format_err
+	moveq	#$1,d4		* 前に＊
+	moveq	#2-1,d0
+	cmpi.b	#'\',(a2)+
+	bne	us_num1
+	moveq	#$1+2,d4	* 前に￥＊
+	moveq	#3-1,d0
+	bra	us_num0
+us_yen:
+	cmpi.b	#'\',(a2)+
+	bne	using_format_err
+	moveq	#$2,d4		* 前に￥
+	moveq	#2-1,d0
+	bra	us_num0
+us_plus:
+	moveq	#$10,d4		* 前にプラス
+	moveq	#1-1,d0
+	bra	us_num0
+ * 数値のフォーマット '##.#'
+us_period:
+	cmpi.b	#'#',(a2)
+	bne	us_mes		* .... とペリオドが並ぶとえげつないことに
+us_num:
+	moveq	#0,d4		* 数値のフォーマット指定用
+	moveq	#-1,d0		* 前の桁の長さ用
+us_num1:
+	subq.l	#1,a2
+us_num0:
+	move.w	#UsingNum,(a4)+		* 中間言語書き込み = 6
+
+	cmp.b	(a5)+,d2
+	bne	using_format_err0
+
+	move.l	a2,-(sp)
+	movea.l	a4,a3
+	move.w	#$8000,d2
+ * 解釈した結果を (a3) からに書き込み、その長さを d0.l に返す
+ * float	d2.w	= 8000
+	movem.w	d0/d4,-(sp)
+	bsr	math解釈
+	movem.w	(sp)+,d0/d4
+
+	movea.l	a3,a4
+	movea.l	(sp)+,a2
+	moveq	#',',d2		* 次の引き数の区切り記号
+
+	bsr	sharp_count
+	move.w	d0,(a4)+	* 前の桁数
+	cmpi.b	#',',(a2)
+	bne	@f
+	addq.l	#1,a2
+	bset	#2,d4		* コンマ
+@@:
+	cmpi.b	#'.',(a2)
+	bne	後ろの桁なし
+	addq.l	#1,a2
+	moveq	#-1,d0
+	bsr	sharp_count
+	move.w	d0,(a4)+	* 後ろの桁数
+	bra	@f
+後ろの桁なし:
+	move.w	#-1,(a4)+
+@@:
+	move.b	(a2),d0
+	cmpi.b	#'+',d0
+	beq	us_plus2
+	cmpi.b	#'-',d0
+	beq	us_minus
+	cmpi.b	#'^',d0
+	bne	us_format0
+
+us_exp:
+	moveq	#5-1,d1
+	movea.l	a2,a0
+@@:
+	cmpi.b	#'^',(a0)+
+	dbne	d1,@b
+	bne	us_format0
+	movea.l	a0,a2
+	bset	#3,d4		* 指数表現
+	bra	us_format0
+us_plus2:
+	bset	#5,d4		* 後ろ＋
+	bra	us_format
+us_minus:
+	bset	#6,d4		* 後ろ－
+*	bra	us_format
+
+us_format:
+	addq.l	#1,a2
+us_format0:
+	move.w	d4,(a4)+
+	bra	us_loop
+
+
+
+us_loop_end:
+	cmpi.b	#';',(a5)
+	bne	pr_crlf_end
+	addq.l	#1,a5
+	bra	pr_not_crlf_end
+
+
+
+
+
+
+sharp_count:
+	addq.w	#1,d0
+	cmpi.b	#'#',(a2)+
+	beq	sharp_count
+	subq.l	#1,a2
+	rts
+
+
+us_sub:
+	move.b	(a2)+,d0
+	beq	using_format_err
+	lea.l	_us_check(pc),a0
+	moveq	#0,d1
+@@:
+	addq.w	#2,d1
+	move.b	(a0)+,d4
+	beq	no_hit
+	cmp.b	d4,d0
+	bne	@b
+	rts
+no_hit:
+	moveq	#0,d1
+	rts
+
+
+_us_check:
+	.dc.b	'_"#.+\*!&@',0
+_using:
+	.dc.b	'using',0
+	.even
+
+
+
+
+using_format_err0:
+	cmpi.b	#';',d2
+	beq	using_no_semicolon
+using_format_err:
+	ERROR	51
+using_no_semicolon:
+	ERROR	52
+
+
+
+
+
+
+
+
+a4word境界:
+	clr.b	(a4)+
+	clr.b	(a4)+
+	move.l	a4,d0
+	bclr	#0,d0
+	movea.l	d0,a4
+	rts
+
+
+
+
+input_sub:
+	bsr	fnc書替sub
+	addq.l	#1,a5
+@@:
+	move.b	(a5)+,d0
+	beq	linput_err
+	cmpi.b	#'"',d0
+	beq	@f
+	cmpi.b	#$d,d0
+	beq	linput_err
+	cmpi.b	#$a,d0
+	beq	linput_err
+	move.b	d0,(a4)+
+	bra	@b
+@@:
+	bsr	first_check_a5_in_line
+	rts
+
+
+
+
+
+
+Input:
+	move.w	d2,(a4)+	* 中間言語書き込み
+
+	cmpi.b	#'"',(a5)
+	bne	@f
+	bsr	input_sub
+
+	cmpi.b	#",",d0
+	beq	inp111
+	cmpi.b	#";",d0
+	beq	inp111
+	bra	input_err
+@@:
+	subq.l	#1,a5
+inp111:
+	bsr	a4word境界
+
+ * 変数名ゲット
+input_loop:
+	addq.l	#1,a5
+
+	bsr	first_check_a5_in_line		* 7/11/8 (thanks for 金子さん)
+	bsr	hash
+	tst.w	d4
+	bmi	input_err
+ 	bsr	variable_check
+ * 重なってない		d2.l	= -1
+ * str の n 番と一致	d2.l	= n+0100	( n < システム変数 )
+ * d2.l < 0 = 代入出来ない（当たりがない or system 変数)
+ * d0 =   0 : 普通の変数
+ *	  1 : 配列	（ a0 = その配列情報のポインタ , d1 = 添え字の最大数 ）
+ *	$80 : auto 変数
+ *	$81 : auto 配列	（ a0 = その配列情報のポインタ , d1 = 添え字の最大数 ）
+ *	 -1 : 当たりなし
+	tst.l	d2
+	bmi	misengen_var		* システム変数も含む
+
+	btst	#0,d0
+	bne	型違い
+
+	swap	d2		* 変数番号
+	tst.b	d0
+	bge	@f
+	not.w	d2		* AUTO 変数
+@@:
+
+	move.l	d2,(a4)+
+
+	cmpi.b	#',',(a5)
+	beq	input_loop
+
+	move.w	#$00ff,(a4)+	* 終わりの印
+
+	rts
+
+
+
+
+
+Linput:
+	move.w	d2,(a4)+	* 中間言語書き込み
+
+	cmpi.b	#'"',(a5)
+	bne	@f
+	bsr	input_sub
+
+	cmpi.b	#";",(a5)+
+	bne	linput_err
+@@:
+	bsr	a4word境界
+
+
+ * 文字列変数名ゲット
+	bsr	first_check_a5_in_line		* 7/11/8 (thanks for 金子さん)
+	bsr	hash
+	tst.w	d4
+	bmi	linput_err
+ 	bsr	variable_check
+ * 重なってない		d2.l	= -1
+ * str の n 番と一致	d2.l	= n+0100	( n < システム変数 )
+ * d2.l < 0 = 代入出来ない（当たりがない or system 変数)
+ * d0 =   0 : 普通の変数
+ *	  1 : 配列	（ a0 = その配列情報のポインタ , d1 = 添え字の最大数 ）
+ *	$80 : auto 変数
+ *	$81 : auto 配列	（ a0 = その配列情報のポインタ , d1 = 添え字の最大数 ）
+ *	 -1 : 当たりなし
+	tst.l	d2
+	bmi	misengen_var		* システム変数も含む
+
+	cmpi.w	#$0100,d2		* $0100 = str
+	bne	型違い
+	btst	#0,d0
+	bne	型違い
+
+	swap	d2		* 変数番号
+	tst.b	d0
+	bge	@f
+	not.w	d2		* AUTO 変数
+@@:
+
+	move.w	d2,(a4)+
+	rts
+
+
+
+
+linput_err:
+input_err:
+	ERROR	55
+
+
+
+
+
+
+
+
+
+
+
+
+
+**	**	**
+
+
+
+
+_INT	equ	$00
+_STR	equ	$01
+_CHAR	equ	$02
+_FLOAT	equ	$80
+
+
+ * 型を得る（省略なら int )
+	.xdef	型getS
+型getS:
+ *		 (INT,STR,CHAR,FLOAT)
+ * d1.w  型を返す(  0,  2,   4,    6)
+ * d0	= 0 省略せず
+ *	= 1 省略
+	bsr	first_check_a5_in_line
+	tst.w	d0
+	ble	dim_mis
+
+	lea.l	_kata1(pc),a2
+	moveq	#4-1,d1
+@@:
+ * (a2) と a5 からの文字列を見比べる。
+ * 一致してかつ、後ろが英数字以外	zero
+ * 不一致				non zero
+ * a0,d0 : 破壊
+ * a2    : $00 の後ろ（次の文字列）
+	bsr	one_check
+	dbeq	d1,@b
+	beq	@f
+	moveq	#0,d1
+	moveq	#1,d0
+	rts
+@@:
+	add.w	d1,d1
+	eori.w	#6,d1
+	moveq	#0,d0
+	rts
+
+
+ * 型を得る（省略なら int )
+	.xdef	型get
+型get:
+ * d0.w  型を返す(INT,STR,CHAR,FLOAT)
+	bsr	first_check_a5_in_line
+	tst.w	d0
+	ble	dim_mis
+
+	lea.l	_kata1(pc),a2
+	lea.l	-2+_kata3(pc),a1
+	moveq	#4-1,d1
+@@:
+ * (a2) と a5 からの文字列を見比べる。
+ * 一致してかつ、後ろが英数字以外	zero
+ * 不一致				non zero
+ * a0,d0 : 破壊
+ * a2    : $00 の後ろ（次の文字列）
+	bsr	one_check
+	addq.l	#2,a1
+	dbeq	d1,@b
+	bne	@f
+	move.w	(a1),d0
+	rts
+@@:
+	moveq	#0,d0
+	rts
+_kata1:
+	.dc.b	'int',0
+	.dc.b	'str',0
+	.dc.b	'char',0
+	.dc.b	'float',0
+	.even
+_kata3:
+	.dc.w	_INT,_STR,_CHAR,_FLOAT
+**	.dc.w	$0000,$0100,$0200,$8000
+
+
+
+
+
+
+
+
+
+
+
+
+
+普通変数登録:
+	moveq	#3,d1		* 一項辺りのデータサイズ ( = 2^3 = 8 )
+*	bsr	変数登録sub
+*	rts
+
+変数登録sub:
+	moveq	#変数個数,d3
+	lsl.w	d1,d3		* 一つの鎖のサイズ（バイト）
+
+	movea.l	(a0)+,a3
+	addq.w	#1,(a0)			* 登録数を一つ増やす
+	move.w	(a0),d2			* 変数番号
+	beq	新たな鎖
+
+	move.w	d2,d0
+@@:
+	sub.w	#変数個数,d0
+	bls	@f
+	adda.w	d3,a3
+	movea.l	(a3),a3		* 次の鎖
+	bra	@b
+
+@@:
+	moveq	#変数個数-1,d0
+	and.w	d2,d0
+	bne	2f
+
+
+新たな鎖:
+	movea.l	a0,a1
+	move.w	d3,d0
+	addq.w	#4,d0		* 次の鎖へのポインタ用
+	bsr	malloc
+	exg	a0,a1
+
+	tst.w	d2
+	bne	1f
+
+	movea.l	a1,a3		* 最初の鎖
+	move.l	a3,-4(a0)
+	bra	3f
+
+1:
+	move.l	a1,(a3,d3.w)	 * 次の鎖へのつなぎ
+	movea.l	a1,a3		* 新たな登録アドレス
+	moveq	#変数個数-1,d0
+	and.w	d2,d0
+
+2:
+	lsl.w	d1,d0
+	adda.w	d0,a3		* 登録アドレス
+
+
+3:
+	move.l	d4,(a3)+	* (hash.w)(文字数 - 1)
+*	move.w	d4,-(sp)
+	bsr	名前登録	* a2,d4 破壊
+	move.l	a0,(a3)+	* 名前アドレス
+*	move.w	(sp)+,d4
+	move.w	-4-2(a3),d4	* 4クロック得
+
+	tst.b	d7
+	bge	@f
+	not.w	d2		* AUTO
+@@:
+	rts
+
+
+
+
+
+
+ * 文字列の大きさの部分を飛ばす
+str_size:
+	subq.w	#_STR,d2	* str 型にサイズの指定ある？
+	bne	@f
+	cmpi.b	#'[',(a5)
+	bne	@f
+	addq.l	#1,a5
+	bsr	int定数get
+	bsr	first_check_a5_in_line
+	cmpi.b	#']',(a5)+
+	bne	var_def_err0
+@@:
+	rts
+
+
+
+
+
+	.xdef	b_argc_def
+b_argc_def:
+	movem.l	d0-d7/a0-a5,-(sp)
+
+	lea.l	_B_ARGC(pc),a5
+	bsr	hash
+	lea.l	変数int,a0
+	bsr	普通変数登録	* 変数番号 0
+
+	lea.l	_B_ARGV(pc),a5
+	bsr	hash
+	lea.l	配列,a0		* global
+	moveq	#5,d1		* 一項辺りのデータサイズ ( = 2^5 = 32 )
+	bsr	変数登録sub	* 配列番号 0
+	move.w	#_STR*$100,(a3)+	* 型
+	clr.l	(a3)		* '1 次元 - 1' + '添え字 ０（変数領域大きさ計算用）'
+
+
+	movem.l	(sp)+,d0-d7/a0-a5
+	rts
+_B_ARGC:
+	.dc.b	'b_argc',0
+_B_ARGV:
+	.dc.b	'b_argv',0
+	.even
+
+
+	.xdef	未宣言をint_sub
+未宣言をint_sub:
+	WARNS	59
+
+	lea.l	変数int,a0
+	tst.b	d7
+	bge	@f
+	lea.l	AUTOint,a0
+@@:
+	bsr	普通変数登録
+	swap	d2
+	clr.w	d2		* int
+	rts
+
+
+
+Int:
+	move.w	#_INT,-(sp)
+	lea.l	変数int,a0
+	tst.b	d7
+	bge	@f
+	lea.l	AUTOint,a0
+@@:	move.l	a0,-(sp)
+	bsr	変数登録
+	addq.l	#6,sp
+	rts
+
+Str:
+	move.w	#_STR,-(sp)
+	lea.l	変数str,a0
+	tst.b	d7
+	bge	@f
+	lea.l	AUTOstr,a0
+@@:	move.l	a0,-(sp)
+	bsr	変数登録
+	addq.l	#6,sp
+	rts
+
+Float:
+	move.w	#_FLOAT,-(sp)
+	lea.l	変数float,a0
+	tst.b	d7
+	bge	@f
+	lea.l	AUTOfloat,a0
+@@:	move.l	a0,-(sp)
+	bsr	変数登録
+	addq.l	#6,sp
+	rts
+
+Char:
+	move.w	#_CHAR,-(sp)
+	lea.l	変数char,a0
+	tst.b	d7
+	bge	@f
+	lea.l	AUTOchar,a0
+@@:	move.l	a0,-(sp)
+	bsr	変数登録
+	addq.l	#6,sp
+	rts
+
+
+	.xdef	Dim
+Dim:
+ * 型を得る（省略なら int )
+	bsr	型get
+ * d0.w  型を返す
+	move.w	d0,-(sp)
+	clr.l	-(sp)
+	bsr	変数登録
+	addq.l	#6,sp
+	rts
+
+
+
+
+
+
+
+
+
+
+
+
+変数登録loop:
+	addq.l	#1,a5
+
+変数登録:
+	bsr	first_check_a5_in_line
+ * 数字なら			d0 = 0
+ * 行の終わりなら		d0 = -1
+ * その他なら			d0 = そのキャラクタ
+	tst.w	d0
+	ble	var_def_err0	* 数字や行末なら当然駄目だ (hash計算前 H8/2/1)
+
+
+ * ハッシュ値を計算しながら、文字数を数える
+	bsr	hash
+ * a2.l = 元の対象の開始アドレス
+ * d4.l = (hash.w)(文字数-1)
+ * d1.b = お次の文字 ( ,: )
+	tst.w	d4
+	bmi	var_def_err
+
+ * 対象がステートメント、関数と一致しないかどうか
+	bsr	statement_check
+ * 一致すれば		d0 = そのステートメント番号
+ * 一致しなければ	d0 = 0
+	tst.w	d0
+	bne	var_def_err
+
+ *		d4.l = * (hash.w)(文字数-1)
+ *		a2.l = 元の対象の開始アドレス
+	bsr	function_check
+ * d0.w = ヒットした関数の返り値の型	( = 0 : 該当関数無し )
+	tst.w	d0
+	bne	var_double_def_err	* 関数と同じ名前
+
+
+ * 他の変数名と重なってないかどうか
+ * 		d4.l = * (hash.w)(文字数-1)
+ * 		a2.l = 元の対象の開始アドレス
+ 	bsr	variable_check
+	bmi	@f
+	tst.b	d7
+	bpl	var_double_def_err
+	tst.b	d0
+	bmi	var_double_def_err
+@@:
+
+
+	cmpi.b	#'(',(a5)	* 配列 ?
+	bne	normal_var_def
+
+
+ * 配列の登録だ
+	tst.l	4(sp)		* 登録ハンドル
+	beq	@f
+	WARNS	11
+@@:
+
+	lea.l	配列,a0
+	tst.b	d7
+	bpl	@f
+	lea.l	AUTO配列,a0
+@@:
+	moveq	#5,d1		* 一項辺りのデータサイズ ( = 2^5 = 32 )
+	bsr	変数登録sub
+
+	move.w 8(sp),d0
+	lsl.w	#8,d0
+	move.w	d0,(a3)+		* 型
+	move.w	d2,-(sp)	* 配列番号保存
+
+	move.l	a3,-(sp)
+	addq.l	#2,a3			* 次元用に空けておく
+	moveq	#-1,d2
+
+	moveq	#1,d1
+	movea.l	a3,a2		* 役割交代
+	lea.l	tmp,a3
+	bclr	#localF,d7	* 添字の大きさに非定数があったかいな
+soeji_loop:
+	addq.l	#1,a5
+
+	movea.l	a3,a1
+	movem.l	d1-d6/a1-a2,-(sp)
+	moveq	#0,d2
+	bsr	math解釈	* math解釈の最適化を利用
+	movem.l	(sp)+,d1-d6/a1-a2
+
+	cmpi.w	#$80_00,(a1)+
+	beq	添字の大きさは定数だ
+		bset	#localF,d7	* 添字の大きさに非定数があったんや
+		moveq	#0,d0		* いらないけど一応
+		bra	@f
+添字の大きさは定数だ:
+	move.l	(a1),d0
+@@:
+
+	cmpi.l	#$10000,d0
+	bcc	dim_mis
+	addq.w	#1,d2		* 次元勘定
+	cmpi.w	#10,d2
+	bcc	dim_ten_err	* １０次元まで
+	move.w	d0,(a2)+	* 添え字
+
+	addq.l	#1,d0
+	FPACK	__LMUL
+	move.l	d0,d1		* 配列データ部のサイズ（要素の個数全体）の計算
+
+	bsr	first_check_a5_in_line
+	cmpi.b	#',',d0
+	beq	soeji_loop
+ * 添字の大きさの解釈終わり
+
+ * d1 = 配列データ部のサイズ（要素の個数全体）
+	exg.l	a2,a3		* 役割また交代
+	movea.l	(sp)+,a0	* 配列リストの '次元-1' を差すポインタ
+	move.w	d2,(a0)+	* 次元 - 1
+
+	btst	#localF,d7
+	beq	添字の大きさは定数ばかりだった
+		btst	#len_dimF,d7
+		beq	可変長配列は使えへん
+		move.w	#34*2,(a4)+		* 配列初期化 statement $$$
+		move.b	#$ff,(a4)+	* 中間言語書き込み : 可変長配列の定義
+		move.w	2+8(sp),d0	* 型
+		move.b	d0,(a4)+	* 中間言語書き込み : 型
+		move.w	(sp),(a4)+	* 中間言語書き込み : 配列番号
+		bge	global可変長配列は使えへんねん
+		move.w	d2,(a4)+	* 中間言語書き込み : 次元-1
+	@@:
+		clr.w	(a0)+		* 変数領域大きさ計算用に添字大きさクリア
+		dbra	d2,@b
+		lea.l	tmp,a0
+		suba.l	a0,a2
+		move.l	a2,d0
+		lsr.w	#1,d0
+		subq.w	#1,d0
+	@@:
+		move.w	(a0)+,(a4)+	* tmp に入れといた添字大きさ情報
+		dbra	d0,@b
+
+添字の大きさは定数ばかりだった:
+	bsr	first_check_a5_in_line
+	cmpi.b	#')',(a5)+	* 配列の添え字
+	bne	dim_mis
+
+
+	move.w	2+8(sp),d2	* 型
+	move.l	d1,-(sp)
+	bsr	str_size
+	move.l	(sp)+,d1
+	move.w	(sp)+,d2	* 配列番号復帰
+
+	bsr	first_check_a5_in_line
+	cmpi.b	#'=',d0			* 初期値データある？
+	bne	変数登録cont
+
+	move.w	8(sp),d3	* 型
+*	lsl.w	#8,d3
+	bsr	dim_init_data
+	bra	変数登録cont
+
+
+
+
+ * 普通変数の登録だ
+normal_var_def:
+	movea.l	4(sp),a0		* 登録ハンドル
+	move.l	a0,d2
+	beq	dim_mis
+	bsr	普通変数登録
+
+	move.w	d2,-(sp)	* 変数番号
+	move.w	2+8(sp),d2	* 型
+	bsr	str_size
+	move.w	(sp)+,d2	* 変数番号
+
+	bsr	first_check_a5_in_line
+	cmpi.b	#'=',(a5)	* 初期値がある？
+	bne	変数登録cont
+	addq.l	#1,a5
+
+	move.w	d2,-(sp)	* 変数番号
+	move.w	2+8(sp),d2	* 型
+	bset	#15,d2		* 普通の代入
+	move.w	d2,(a4)+	* 中間言語書き込み
+
+	lsl.w	#8,d2
+	movea.l	a4,a3
+ * 解釈した結果を (a3) からに書き込み、その長さを d0.l に返す
+ * 型未判明	d2.w	= ffff
+	bsr	math解釈
+	movea.l	a3,a4
+
+	move.w	(sp)+,(a4)+	* 中間言語書き込み。変数番号。
+
+変数登録cont:
+	cmpi.b	#',',(a5)	* 続きがある？
+	beq	変数登録loop
+	rts
+
+
+
+
+
+
+
+ * 初期化データ
+ *	d3 = 型
+ *	d2 = 配列番号
+ *	d1 = 添え字大きさ
+	.xdef	dim_init_data
+dim_init_data:
+	addq.l	#1,a5
+
+	move.w	#34*2,(a4)+		* 配列初期化 statement $$$
+	move.w	d3,(a4)+	* 中間言語書き込み : 型
+
+	move.w	d2,(a4)+	* 中間言語書き込み : 配列番号
+
+	movea.l	a4,a3		* (初期化データの個数 - 1) を書き込むアドレス
+	addq.l	#2,a4
+
+	bsr	first_check_a5_in_line
+	cmpi.b	#'{',d0
+	bne	dim_mis
+
+	moveq	#0,d2
+
+
+did_loop:
+	addq.l	#1,a5
+	bsr	first_check_a5_remark
+
+	cmpi.b	#1,d3
+	bne	did_not_str
+
+
+*did_str:
+	cmpi.b	#'"',(a5)+
+	bne	dim_mis
+@@:
+	move.b	(a5)+,d0
+	beq	dim_mis
+	cmpi.b	#'"',d0
+	beq	@f
+	move.b	d0,(a4)+
+	bra	@b
+
+@@:
+	clr.b	(a4)+
+	bra	did_cont
+
+
+did_not_str:
+	tst.b	d3
+	beq	did_int
+	bmi	did_float
+*did_char:
+	bsr	int定数get
+	move.b	d0,(a4)+
+	bra	did_cont
+did_float:
+	movem.w	d1/d2/d3,-(sp)
+	movea.l	a5,a0
+	FPACK	__VAL
+	movea.l	a0,a5
+	cmpi.b	#'#',(a5)	* 応急処置
+	bne	@f
+	addq.l	#1,a5
+@@:
+	move.l	d0,(a4)+
+	move.l	d1,(a4)+
+	movem.w	(sp)+,d1/d2/d3
+	bra	did_cont
+did_int:
+	bsr	int定数get
+	move.l	d0,(a4)+
+
+
+did_cont:
+	addq.w	#1,d2
+
+	bsr	first_check_a5_remark
+	cmpi.b	#',',d0
+	beq	did_loop
+
+	cmpi.b	#'}',(a5)+
+	bne	dim_mis
+
+	subq.w	#1,d2
+	bcs	dim_mis
+
+	cmp.w	d1,d2
+	bhi	dim_mis
+	move.w	d2,(a3)		* 初期化データの個数
+
+	move.l	a4,d0
+	addq.l	#1,d0
+	andi.b	#$fe,d0
+	movea.l	d0,a4		* ワード境界に補正
+
+	rts
+
+
+
+
+
+
+var_def_err0:		* hash値を計算する前はここ
+	ERROR	5	* 宣言がおかしい
+var_def_err:
+	ERRORS	5	* 宣言がおかしい
+var_double_def_err:
+	ERRORS	6	* 二重に宣言するなんて
+no_soeji:
+	ERROR	35
+dim_mis:
+	ERROR	36
+dim_ten_err:
+	ERROR	60
+可変長配列は使えへん:
+	ERROR	84
+global可変長配列は使えへんねん:
+	ERROR	85
+
+
+
+
+
+	.end
+

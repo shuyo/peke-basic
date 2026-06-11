@@ -1,0 +1,1719 @@
+
+*━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*
+*	xbfunc.has  ……   ぺけ-ＢＡＳＩＣの標準関数
+*
+*━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+	.include	doscall.mac
+	.include	iocscall.mac
+	.include	fefunc.h
+	.include	fdef.h
+
+	.include	variable.h
+
+
+	.xref	hash
+
+
+	.text
+	.even
+
+	.xdef	standard_init
+standard_init:
+	move.w	d5,-(sp)
+
+	lea.l	ptr_token(pc),a5
+	lea.l	ptr_param(pc),a0
+	lea.l	ptr_exec(pc),a1
+	moveq	#0,d3
+standard_init_loop:
+	bsr	hash
+ * a2.l = 元の対象の開始アドレス
+ * d4.l = (hash.w)(文字数 - 1)
+	move.l	d4,(a4)+	* (hash.w)(文字数 - 1)
+	move.l	a2,(a4)+	* 名前
+	move.w	(a0,d3.w),d0
+	lea.l	(a0,d0.w),a2
+	move.l	a2,(a4)+	* パラメータリストを指すポインタ
+	move.w	(a1,d3.w),d0
+	lea.l	(a1,d0.w),a2
+	move.l	a2,(a4)+	* 実行アドレス
+
+	addq.w	#1,d6
+	addq.w	#2,d3
+	addq.l	#1,a5		* $00
+
+	tst.b	(a5)
+	bne	standard_init_loop
+
+
+ * 標準関数の初期化処理
+	move.w	#-1,strtok_work
+
+
+	move.w	(sp)+,d5
+	rts
+
+
+
+
+
+
+
+
+
+ptr_token:
+
+* 数値演算
+	.dc.b	'pi',0
+	.dc.b	'abs',0
+	.dc.b	'fix',0
+	.dc.b	'int',0
+	.dc.b	'sgn',0
+	.dc.b	'sin',0
+	.dc.b	'cos',0
+	.dc.b	'tan',0
+	.dc.b	'atan',0
+	.dc.b	'log',0
+	.dc.b	'exp',0
+	.dc.b	'pow',0
+	.dc.b	'sqr',0
+	.dc.b	'randomize',0
+	.dc.b	'rnd',0
+	.dc.b	'rand',0
+	.dc.b	'srand',0
+
+* データ変換
+	.dc.b	'atof',0
+	.dc.b	'atoi',0
+	.dc.b	'ecvt',0
+	.dc.b	'fcvt',0
+	.dc.b	'gcvt',0
+	.dc.b	'itoa',0
+	.dc.b	'str$',0
+	.dc.b	'val',0
+**	.dc.b	'using$',0		**
+**	.dc.b	'atob',0		**
+
+	.dc.b	'asc',0
+	.dc.b	'instr',0
+	.dc.b	'len',0
+	.dc.b	'bin$',0
+	.dc.b	'chr$',0
+	.dc.b	'hex$',0
+	.dc.b	'left$',0
+	.dc.b	'mid$',0
+	.dc.b	'mirror$',0
+	.dc.b	'oct$',0
+	.dc.b	'right$',0
+	.dc.b	'space$',0
+	.dc.b	'spc',0
+	.dc.b	'tab',0
+	.dc.b	'string$',0
+**	.dc.b	'float$',0		**
+**	.dc.b	'hexfloat',0		**
+
+* 文字列処理
+	.dc.b	'strchr',0
+	.dc.b	'strcspn',0
+	.dc.b	'strlen',0
+	.dc.b	'strlwr',0
+	.dc.b	'strnset',0
+	.dc.b	'strrchr',0
+	.dc.b	'strrev',0
+	.dc.b	'strset',0
+	.dc.b	'strspn',0
+	.dc.b	'strtok',0
+	.dc.b	'strupr',0
+	.dc.b	'isalnum',0
+	.dc.b	'isalpha',0
+	.dc.b	'isascii',0
+	.dc.b	'iscntrl',0
+	.dc.b	'isdigit',0
+	.dc.b	'isgraph',0
+	.dc.b	'islower',0
+	.dc.b	'isprint',0
+	.dc.b	'ispunct',0
+	.dc.b	'isspace',0
+	.dc.b	'isupper',0
+	.dc.b	'isxdigit',0
+	.dc.b	'toascii',0
+	.dc.b	'tolower',0
+	.dc.b	'toupper',0
+
+* ファイル入出力
+	.dc.b	'dskf',0
+	.dc.b	'fclose',0
+	.dc.b	'fcloseall',0
+	.dc.b	'feof',0
+	.dc.b	'fgetc',0
+	.dc.b	'fopen',0
+	.dc.b	'fputc',0
+	.dc.b	'fread',0
+	.dc.b	'freads',0
+	.dc.b	'fseek',0
+	.dc.b	'fwrite',0
+	.dc.b	'fwrites',0
+	.dc.b	'fdelete',0
+	.dc.b	'frename',0
+
+
+
+	.dc.b	0
+	.even
+
+
+
+
+ptr_param:
+pp:
+	.dc.w	p_pi-pp
+	.dc.w	p_abs-pp
+	.dc.w	p_fix-pp
+	.dc.w	p_int-pp
+	.dc.w	p_sgn-pp
+	.dc.w	p_sin-pp
+	.dc.w	p_cos-pp
+	.dc.w	p_tan-pp
+	.dc.w	p_atan-pp
+	.dc.w	p_log-pp
+	.dc.w	p_exp-pp
+	.dc.w	p_pow-pp
+	.dc.w	p_sqr-pp
+	.dc.w	p_randomize-pp
+	.dc.w	p_rnd-pp
+	.dc.w	p_rand-pp
+	.dc.w	p_srand-pp
+	.dc.w	p_atof-pp
+	.dc.w	p_atoi-pp
+	.dc.w	p_ecvt-pp
+	.dc.w	p_fcvt-pp
+	.dc.w	p_gcvt-pp
+	.dc.w	p_itoa-pp
+	.dc.w	p_strS-pp
+	.dc.w	p_val-pp
+	.dc.w	p_asc-pp
+	.dc.w	p_instr-pp
+	.dc.w	p_len-pp
+	.dc.w	p_binS-pp
+	.dc.w	p_chrS-pp
+	.dc.w	p_hexS-pp
+	.dc.w	p_leftS-pp
+	.dc.w	p_midS-pp
+	.dc.w	p_mirrorS-pp
+	.dc.w	p_octS-pp
+	.dc.w	p_rightS-pp
+	.dc.w	p_spaceS-pp
+	.dc.w	p_spc-pp
+	.dc.w	p_tab-pp
+	.dc.w	p_stringS-pp
+	.dc.w	p_strchr-pp
+	.dc.w	p_strcspn-pp
+	.dc.w	p_len-pp
+	.dc.w	p_strlwr-pp
+	.dc.w	p_strnset-pp
+	.dc.w	p_strrchr-pp
+	.dc.w	p_strrev-pp
+	.dc.w	p_strset-pp
+	.dc.w	p_strspn-pp
+	.dc.w	p_strtok-pp
+	.dc.w	p_strupr-pp
+	.dc.w	p_isalnum-pp
+	.dc.w	p_isalpha-pp
+	.dc.w	p_isascii-pp
+	.dc.w	p_iscntrl-pp
+	.dc.w	p_isdigit-pp
+	.dc.w	p_isgraph-pp
+	.dc.w	p_islower-pp
+	.dc.w	p_isprint-pp
+	.dc.w	p_ispunct-pp
+	.dc.w	p_isspace-pp
+	.dc.w	p_isupper-pp
+	.dc.w	p_isxdigit-pp
+	.dc.w	p_toascii-pp
+	.dc.w	p_tolower-pp
+	.dc.w	p_toupper-pp
+	.dc.w	p_dskf-pp
+	.dc.w	p_fclose-pp
+	.dc.w	p_fcloseall-pp
+	.dc.w	p_feof-pp
+	.dc.w	p_fgetc-pp
+	.dc.w	p_fopen-pp
+	.dc.w	p_fputc-pp
+	.dc.w	p_fread-pp
+	.dc.w	p_freads-pp
+	.dc.w	p_fseek-pp
+	.dc.w	p_fwrite-pp
+	.dc.w	p_fwrites-pp
+	.dc.w	p_fdelete-pp
+	.dc.w	p_frename-pp
+
+
+ptr_exec:
+pe:
+	.dc.w	pi-pe
+	.dc.w	abs-pe
+	.dc.w	fix-pe
+	.dc.w	int-pe
+	.dc.w	sgn-pe
+	.dc.w	sin-pe
+	.dc.w	cos-pe
+	.dc.w	tan-pe
+	.dc.w	atan-pe
+	.dc.w	log-pe
+	.dc.w	exp-pe
+	.dc.w	pow-pe
+	.dc.w	sqr-pe
+	.dc.w	randomize-pe
+	.dc.w	rnd-pe
+	.dc.w	rand-pe
+	.dc.w	srand-pe
+	.dc.w	atof-pe
+	.dc.w	atoi-pe
+	.dc.w	ecvt-pe
+	.dc.w	fcvt-pe
+	.dc.w	gcvt-pe
+	.dc.w	itoa-pe
+	.dc.w	strS-pe
+	.dc.w	val-pe
+	.dc.w	asc-pe
+	.dc.w	instr-pe
+	.dc.w	len-pe
+	.dc.w	binS-pe
+	.dc.w	chrS-pe
+	.dc.w	hexS-pe
+	.dc.w	leftS-pe
+	.dc.w	midS-pe
+	.dc.w	mirrorS-pe
+	.dc.w	octS-pe
+	.dc.w	rightS-pe
+	.dc.w	spaceS-pe
+	.dc.w	spc-pe
+	.dc.w	tab-pe
+	.dc.w	stringS-pe
+	.dc.w	strchr-pe
+	.dc.w	strcspn-pe
+	.dc.w	len-pe
+	.dc.w	strlwr-pe
+	.dc.w	strnset-pe
+	.dc.w	strrchr-pe
+	.dc.w	strrev-pe
+	.dc.w	strset-pe
+	.dc.w	strspn-pe
+	.dc.w	strtok-pe
+	.dc.w	strupr-pe
+	.dc.w	isalnum-pe
+	.dc.w	isalpha-pe
+	.dc.w	isascii-pe
+	.dc.w	iscntrl-pe
+	.dc.w	isdigit-pe
+	.dc.w	isgraph-pe
+	.dc.w	islower-pe
+	.dc.w	isprint-pe
+	.dc.w	ispunct-pe
+	.dc.w	isspace-pe
+	.dc.w	isupper-pe
+	.dc.w	isxdigit-pe
+	.dc.w	toascii-pe
+	.dc.w	tolower-pe
+	.dc.w	toupper-pe
+	.dc.w	dskf-pe
+	.dc.w	fclose-pe
+	.dc.w	fcloseall-pe
+	.dc.w	feof-pe
+	.dc.w	fgetc-pe
+	.dc.w	fopen-pe
+	.dc.w	fputc-pe
+	.dc.w	fread-pe
+	.dc.w	freads-pe
+	.dc.w	fseek-pe
+	.dc.w	fwrite-pe
+	.dc.w	fwrites-pe
+	.dc.w	fdelete-pe
+	.dc.w	frename-pe
+
+
+
+
+
+
+
+*-------------------
+
+
+ * float 返り値 *
+
+p_pi:
+	.dc.w	float_omt	* 省略可能なＦＬＯＡＴ
+	.dc.w	float_ret
+
+p_pow:
+	.dc.w	float_val	* 省略不能なＦＬＯＡＴ
+p_abs:
+p_fix:
+p_sgn:
+p_sin:
+p_cos:
+p_tan:
+p_atan:
+p_log:
+p_exp:
+p_sqr:
+p_int:
+	.dc.w	float_val	* 省略不能なＦＬＯＡＴ
+p_rnd:
+	.dc.w	float_ret
+
+
+p_atof:
+p_val:
+	.dc.w	str_val
+	.dc.w	float_ret
+
+
+
+
+
+
+ * int 返り値 *
+
+p_rand:
+	.dc.w	int_ret
+
+
+p_instr:
+	.dc.w	int_val
+p_strcspn:
+p_strspn:
+	.dc.w	str_val
+p_asc:
+p_len:
+p_atoi:
+	.dc.w	str_val
+	.dc.w	int_ret
+
+
+p_strchr:
+p_strrchr:
+	.dc.w	str_val
+p_isalnum:
+p_isalpha:
+p_isascii:
+p_iscntrl:
+p_isdigit:
+p_isgraph:
+p_islower:
+p_isprint:
+p_ispunct:
+p_isspace:
+p_isupper:
+p_isxdigit:
+p_toascii:
+p_tolower:
+p_toupper:
+p_dskf:
+	.dc.w	char_val
+	.dc.w	int_ret
+
+
+
+
+p_fputc:
+	.dc.w	char_val
+p_fclose:
+p_feof:
+p_fgetc:
+	.dc.w	int_val
+p_fcloseall:
+	.dc.w	int_ret
+
+
+p_fread:
+p_fwrite:
+	.dc.w	ary1_fic
+	.dc.w	int_val
+	.dc.w	int_val
+	.dc.w	int_ret
+
+p_freads:
+	.dc.w	str_vp
+	.dc.w	int_val
+	.dc.w	int_ret
+
+p_fwrites:
+	.dc.w	str_val
+	.dc.w	int_val
+	.dc.w	int_ret
+
+
+p_fseek:
+	.dc.w	int_val
+	.dc.w	int_val
+	.dc.w	int_val
+	.dc.w	int_ret
+
+
+p_fopen:
+p_frename:
+	.dc.w	str_val
+p_fdelete:
+	.dc.w	str_val
+	.dc.w	int_ret
+
+
+
+
+
+
+
+ * str 返り値 *
+
+
+p_leftS:
+p_rightS:
+	.dc.w	str_val
+p_binS:
+p_octS:
+p_hexS:
+p_spaceS:
+p_spc:
+p_tab:
+p_itoa:
+	.dc.w	int_val
+	.dc.w	str_ret
+
+
+p_midS:
+	.dc.w	str_val
+	.dc.w	int_val
+	.dc.w	int_val
+	.dc.w	str_ret
+
+
+p_gcvt:
+	.dc.w	float_val
+	.dc.w	int_val
+	.dc.w	str_ret
+
+p_strnset:
+	.dc.w	str_vp
+	.dc.w	char_val
+	.dc.w	int_val
+	.dc.w	str_ret
+
+
+p_ecvt:
+p_fcvt:
+	.dc.w	float_val
+	.dc.w	int_val
+	.dc.w	int_vp
+	.dc.w	int_vp
+	.dc.w	str_ret
+
+
+p_strS:
+	.dc.w	float_val
+	.dc.w	str_ret
+
+p_strtok:
+	.dc.w	str_val
+	.dc.w	str_val
+	.dc.w	str_ret
+
+
+
+p_stringS:
+	.dc.w	int_val
+p_mirrorS:
+	.dc.w	str_val
+	.dc.w	str_ret
+
+
+p_strlwr:
+p_strupr:
+p_strrev:
+	.dc.w	str_vp
+	.dc.w	str_ret
+
+
+p_strset:
+	.dc.w	str_vp
+p_chrS:
+	.dc.w	char_val
+	.dc.w	str_ret
+
+
+
+
+
+
+
+
+p_randomize:
+p_srand:
+	.dc.w	int_val
+	.dc.w	void_ret
+
+*-------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+*-------------------
+
+dskf:
+	moveq	#0,d0
+	move.b	par1+9(sp),d0
+	lea.l	tmp,a0
+	move.l	a0,-(sp)
+	move.w	d0,-(sp)
+	DOS	_DSKFRE
+	addq.l	#6,sp
+	tst.l	d0
+	bmi	doscall_err
+	move.w	(a0),d0
+	mulu	4(a0),d0
+	mulu	6(a0),d0
+	bra	return_d0
+
+
+fclose:
+	move.w	par1+8(sp),-(sp)
+	DOS	_CLOSE
+	addq.l	#2,sp
+	tst.l	d0
+	bge	file_end
+	bra	doscall_err
+fcloseall:
+	DOS	_ALLCLOSE
+	bra	file_end
+feof:					* by Eriko Tachibana
+	moveq	#1,d0
+	move.w	d0,-(sp)		* 現在位置から
+	move.l	d0,-(sp)		* 1バイト後方に移動
+	move.w	6+par1+8(sp),-(sp)
+	DOS	_SEEK
+	tst.l	d0
+	bmi	feof_err
+	moveq	#-1,d0
+	move.l	d0,2(sp)		* 1バイト前方に移動
+	DOS	_SEEK
+	addq.l	#8,sp
+	bra	return_zero
+feof_err:
+	addq.l	#8,sp
+	cmpi.w	#-25,d0		* 指定の位置にはシークできまへん
+	beq	return_minus
+	bra	doscall_err
+
+fgetc:
+	move.w	par1+8(sp),-(sp)
+	DOS	_FGETC
+	addq.l	#2,sp
+	tst.l	d0
+	bge	file_end
+	cmpi.w	#$ffff,d0
+	beq	return_minus
+	bra	doscall_err
+
+fopen:
+	movea.l	par2+6(sp),a0
+	moveq	#$20,d0
+	or.b	(a0)+,d0
+	cmpi.b	#'r',d0
+	beq	fopen_read
+	cmpi.b	#'w',d0
+	beq	fopen_write
+	cmpi.b	#'c',d0
+	bne	openmode_err
+fopen_create:
+	tst.b	(a0)		* c
+	bne	openmode_err
+
+	move.w	#$20,-(sp)
+	move.l	2+par1+6(sp),-(sp)
+	DOS	_CREATE
+	addq.l	#6,sp
+	tst.l	d0
+	bge	file_end
+	bra	doscall_err
+
+fopen_read:
+	moveq	#0,d1
+	moveq	#$20,d0
+	or.b	(a0),d0
+	cmpi.b	#'w',d0		* rw
+	bne	fopen_ok
+	moveq	#2,d1
+	addq.l	#1,a0
+	bra	fopen_ok
+
+fopen_write:
+	moveq	#1,d1
+fopen_ok:
+	tst.b	(a0)
+	bne	openmode_err
+
+	move.w	d1,-(sp)
+	move.l	2+par1+6(sp),-(sp)
+	DOS	_OPEN
+	addq.l	#6,sp
+	tst.l	d0
+	bge	file_end
+	bra	doscall_err
+
+
+
+
+fputc:
+	moveq	#0,d0
+	move.b	par1+9(sp),d0
+	move.w	par2+8(sp),-(sp)
+	move.w	d0,-(sp)
+	DOS	_FPUTC
+	addq.l	#4,sp
+	tst.l	d0
+	bmi	doscall_err
+	moveq	#0,d0
+	move.b	par1+9(sp),d0
+	bra	return_d0
+
+fread:
+	bsr	frw_sub
+	move.l	d2,-(sp)
+	move.l	a0,-(sp)
+	move.w	8+par3+8(sp),-(sp)
+	DOS	_READ
+	lea.l	10(sp),sp
+	tst.l	d0
+	bge	file_end
+	bra	doscall_err
+fwrite:
+	bsr	frw_sub
+	move.l	d2,-(sp)
+	move.l	a0,-(sp)
+	move.w	8+par3+8(sp),-(sp)
+	DOS	_WRITE
+	lea.l	10(sp),sp
+	tst.l	d0
+	bge	file_end
+	bra	doscall_err
+
+frw_sub:
+	move.l	4+par1+6(sp),a0
+	addq.l	#6,a0
+	move.w	(a0)+,d0		* データのサイズ(1,4,8)
+	move.b	1f-1(pc,d0.w),d0	* シフト数 (by Eriko Tachibana)
+	moveq	#0,d1
+	move.w	(a0)+,d1		* 添え字の大きさ(0～65535)
+	move.l	4+par2+6(sp),d2		* 書き込みサイズ
+	bmi	無効な要素数
+	addq.l	#1,d1
+	cmp.l	d2,d1
+	bcs	無効な要素数
+	lsl.l	d0,d2
+	rts
+1:
+	.dc.b	0,0,0,2,0,0,0,3
+	.even
+
+
+fwrites:
+	movea.l	par1+6(sp),a0
+	move.w	par2+8(sp),-(sp)
+	move.l	a0,-(sp)
+	DOS	_FPUTS
+	addq.l	#6,sp
+	tst.l	d0
+	bmi	doscall_err
+	moveq	#0,d0
+@@:
+	addq.w	#1,d0
+	tst.b	(a0)+
+	bne	@b
+	subq.w	#1,d0
+	bra	return_d0
+
+freads:
+	move.w	par2+8(sp),-(sp)
+	lea.l	tmp,a1
+	move.l	a1,-(sp)	* inpptr
+	move.w	#$ff_00,(a1)+
+	DOS	_FGETS
+	addq.l	#6,sp
+	tst.l	d0
+	bge	@f
+	cmpi.w	#$ffff,d0
+	beq	return_minus
+	bra	doscall_err
+@@:
+	movea.l	par1+6(sp),a0
+	moveq	#0,d0
+@@:
+	addq.w	#1,d0
+	move.b	(a1)+,(a0)+
+	bne	@b
+	subq.w	#1,d0
+	beq	return_d0	* EOF($1a) check (H8/1/21)
+	cmpi.b	#$1a,-2(a0)
+	bne	return_d0
+*	subq.w	#1,d0
+	moveq	#-1,d0
+	clr.b	-2(a0)
+	bra	return_d0
+
+
+
+fseek:
+	move.w	par3+8(sp),-(sp)
+	move.l	2+par2+6(sp),-(sp)
+	move.w	6+par1+8(sp),-(sp)
+	DOS	_SEEK
+	addq.l	#8,sp
+	tst.l	d0
+	bge	file_end
+	bra	doscall_err
+
+fdelete:
+	move.l	par1+6(sp),-(sp)
+	DOS	_DELETE
+	addq.l	#4,sp
+	tst.l	d0
+	bge	file_end
+	bra	doscall_err
+
+frename:
+	move.l	par2+6(sp),-(sp)
+	move.l	4+par1+6(sp),-(sp)
+	DOS	_RENAME
+	addq.l	#8,sp
+	tst.l	d0
+	bge	file_end
+	bra	doscall_err
+
+
+
+
+
+
+
+
+
+
+
+
+
+*-------------------
+strchr:
+	move.l	par1+6(sp),a0
+	move.b	par2+9(sp),d2
+	moveq	#0,d0
+@@:
+	move.b	(a0)+,d1
+	beq	return_minus
+	addq.w	#1,d0			* 7/11/8 (thanks for NAONAO.)
+	cmp.b	d1,d2
+	bne	@b
+	subq.w	#1,d0			* 7/11/8
+	bra	return_d0
+
+strcspn:
+	move.l	par2+6(sp),a1
+	movea.l	a1,a0
+	moveq	#-2,d4
+@@:
+	addq.w	#1,d4
+	tst.b	(a0)+
+	bne	@b
+
+	move.l	par1+6(sp),a0
+	moveq	#0,d0
+strcspn1:
+	move.b	(a0)+,d1
+	beq	return_d0
+
+	move.w	d4,d2
+	bmi	strcspn2
+	movea.l	a1,a2
+@@:
+	cmp.b	(a2)+,d1
+	dbeq	d2,@b
+	beq	return_d0
+strcspn2:
+	addq.w	#1,d0
+	bra	strcspn1
+
+
+strspn:
+	move.l	par2+6(sp),a1
+	movea.l	a1,a0
+	moveq	#-2,d4
+@@:
+	addq.w	#1,d4
+	tst.b	(a0)+
+	bne	@b
+
+	move.l	par1+6(sp),a0
+	moveq	#0,d0
+strspn1:
+	move.b	(a0)+,d1
+	beq	return_d0
+
+	move.w	d4,d2
+	bmi	strspn2
+	movea.l	a1,a2
+@@:
+	cmp.b	(a2)+,d1
+	dbeq	d2,@b
+	bne	return_d0
+strspn2:
+	addq.w	#1,d0
+	bra	strspn1
+
+
+
+
+
+strlwr:
+	move.l	par1+6(sp),a0
+	movea.l	a0,a1
+@@:
+	move.b	(a0)+,d0
+	beq	return_a1
+	cmpi.b	#'A',d0
+	bcs	@b
+	cmpi.b	#'Z',d0
+	bhi	@b
+	ori.b	#$20,-1(a0)
+	bra	@b
+
+strupr:
+	move.l	par1+6(sp),a0
+	movea.l	a0,a1
+@@:
+	move.b	(a0)+,d0
+	beq	return_a1
+	cmpi.b	#'a',d0
+	bcs	@b
+	cmpi.b	#'z',d0
+	bhi	@b
+	andi.b	#$DF,-1(a0)
+	bra	@b
+
+
+strnset:
+	move.l	par1+6(sp),a0
+	move.b	par2+9(sp),d0
+	move.l	par3+6(sp),d1
+	movea.l	a0,a1
+	subq.w	#1,d1
+	bcs	return_a1
+@@:
+	tst.b	(a0)
+	beq	return_a1
+	move.b	d0,(a0)+
+	dbra	d1,@b
+	bra	return_a1
+
+strrchr:
+	move.l	par1+6(sp),a0
+	move.b	par2+9(sp),d2
+	moveq	#0,d0
+@@:
+	addq.w	#1,d0
+	tst.b	(a0)+
+	bne	@b
+
+	subq.l	#1,a0
+	subq.w	#2,d0
+	bcs	return_minus
+
+@@:
+	cmp.b	-(a0),d2
+	dbeq	d0,@b
+	ext.l	d0
+	bra	return_d0
+
+strset:
+	move.l	par1+6(sp),a0
+	move.b	par2+9(sp),d0
+@@:
+	tst.b	(a0)
+	beq	return_a1
+	move.b	d0,(a0)+
+	bra	@b
+
+
+
+
+strrev:
+	move.l	par1+6(sp),a1
+	move.l	a1,a2
+	lea.l	tmp,a0
+	moveq	#-1,d0
+@@:
+	addq.w	#1,d0
+	move.b	(a2)+,(a0)+
+	bne	@b
+
+	subq.w	#1,d0
+	bcs	return_nula1
+	subq.l	#1,a0
+	move.l	a1,a2
+@@:
+	move.b	-(a0),(a2)+
+	dbra	d0,@b
+	clr.b	(a2)
+	bra	return_a1
+
+
+strtok:
+	move.l	par1+6(sp),a0
+	tst.b	(a0)
+	beq	strtok二回目
+	lea.l	strtok_buf,a1
+	movea.l	a1,a2
+@@:
+	move.b	(a0)+,(a2)+
+	bne	@b
+	moveq	#0,d0
+	bra	strtok4
+
+
+strtok二回目:
+	move.w	strtok_work,d0
+	bmi	return_nul
+	lea.l	strtok_buf,a1
+	adda.w	d0,a1
+
+strtok4:
+	move.l	par2+6(sp),a0
+	bsr	len_a0
+strtok2:
+	move.b	(a1),d1
+	bsr	check_a0
+	bne	strtok1
+	addq.w	#1,d0
+	addq.l	#1,a1
+	bra	strtok2
+
+strtok1:
+	lea.l	tmp,a3
+strtok_loop:
+	move.b	(a1)+,d1
+	beq	strtok_end
+	addq.w	#1,d0
+	bsr	check_a0
+	beq	strtok_end
+	move.b	d1,(a3)+
+	bra	strtok_loop
+
+strtok_end:
+	clr.b	(a3)
+	move.w	d0,strtok_work
+	bra	return_buf
+
+
+
+len_a0:
+	move.l	a0,a2
+	moveq	#0,d2
+@@:
+	addq.w	#1,d2
+	tst.b	(a2)+
+	bne	@b
+	rts
+
+check_a0:
+	move.l	a0,a2
+	move.l	d2,d3
+	subq.w	#2,d3
+	bcs	check_a0_end
+@@:
+	cmp.b	(a2)+,d1
+	dbeq	d3,@b
+check_a0_end:
+	rts
+
+
+
+
+
+
+
+
+isalnum:
+	move.b	par1+9(sp),d0
+	cmpi.b	#'0',d0
+	bcs	return_zero
+	cmpi.b	#'9',d0
+	bls	return_minus
+isalpha0:
+	cmpi.b	#'A',d0
+	bcs	return_zero
+	cmpi.b	#'Z',d0
+	bls	return_minus
+islower0:
+	cmpi.b	#'a',d0
+	bcs	return_zero
+	cmpi.b	#'z',d0
+	bls	return_minus
+	bra	return_zero
+isalpha:
+	move.b	par1+9(sp),d0
+	bra	isalpha0
+isascii:
+	move.b	par1+9(sp),d0
+	bge	return_minus
+	bra	return_zero
+iscntrl:
+	move.b	par1+9(sp),d0
+	cmpi.b	#$7f,d0
+	beq	return_minus
+	cmpi.b	#$20,d0
+	bcs	return_minus
+	bra	return_zero
+isdigit:
+	move.b	par1+9(sp),d0
+	cmpi.b	#'0',d0
+	bcs	return_zero
+	cmpi.b	#'9',d0
+	bls	return_minus
+	bra	return_zero
+isgraph:
+	move.b	par1+9(sp),d0
+	cmpi.b	#$21,d0
+	bcs	return_zero
+	cmpi.b	#$7e,d0
+	bls	return_minus
+	bra	return_zero
+islower:
+	move.b	par1+9(sp),d0
+	bra	islower0
+isprint:
+	move.b	par1+9(sp),d0
+	cmpi.b	#$20,d0
+	bcs	return_zero
+	cmpi.b	#$7e,d0
+	bls	return_minus
+	bra	return_zero
+ispunct:
+	move.b	par1+9(sp),d0
+	cmpi.b	#$20,d0
+	bcs	return_zero
+	cmpi.b	#$2f,d0
+	bls	return_minus
+	cmpi.b	#$3a,d0
+	bcs	return_zero
+	cmpi.b	#$40,d0
+	bls	return_minus
+	cmpi.b	#$5b,d0
+	bcs	return_zero
+	cmpi.b	#$60,d0
+	bls	return_minus
+	cmpi.b	#$7b,d0
+	bcs	return_zero
+	cmpi.b	#$7e,d0
+	bls	return_minus
+	bra	return_zero
+isspace:
+	move.b	par1+9(sp),d0
+	cmpi.b	#$20,d0
+	beq	return_minus
+	cmpi.b	#$9,d0
+	bcs	return_zero
+	cmpi.b	#$d,d0
+	bls	return_minus
+	bra	return_zero
+isupper:
+	move.b	par1+9(sp),d0
+	cmpi.b	#'A',d0
+	bcs	return_zero
+	cmpi.b	#'Z',d0
+	bls	return_minus
+	bra	return_zero
+isxdigit:
+	move.b	par1+9(sp),d0
+	cmpi.b	#'0',d0
+	bcs	return_zero
+	cmpi.b	#'9',d0
+	bls	return_minus
+	ori.b	#$20,d0		* 島崎さん、ありがとー
+	cmpi.b	#'a',d0
+	bcs	return_zero
+	cmpi.b	#'f',d0
+	bls	return_minus
+	bra	return_zero
+
+
+toascii:
+	moveq	#0,d0
+	move.b	par1+9(sp),d0
+	andi.w	#$7f,d0		* 島崎さん、ありがとー
+	bra	return_d0
+tolower:
+	moveq	#0,d0
+	move.b	par1+9(sp),d0
+	cmpi.b	#'A',d0
+	bcs	return_d0
+	cmpi.b	#'Z',d0
+	bhi	return_d0
+	ori.b	#$20,d0
+	bra	return_d0
+
+toupper:
+	moveq	#0,d0
+	move.b	par1+9(sp),d0
+	cmpi.b	#'a',d0
+	bcs	return_d0
+	cmpi.b	#'z',d0
+	bhi	return_d0
+	andi.b	#$DF,d0
+	bra	return_d0
+
+
+
+
+
+
+
+
+*-------------------
+instr:
+	move.l	par2+6(sp),a0
+	move.l	par3+6(sp),a1
+
+	move.l	par1+6(sp),d1
+	ble	return_zero
+
+	move.l	d1,d0
+	subq.w	#2,d1
+	bcs	ins1
+@@:
+	tst.b	(a0)+
+	dbeq	d1,@b
+	beq	return_zero
+ins1:
+	move.b	(a1)+,d2
+ins_loop:
+	move.b	(a0)+,d1
+	beq	return_zero
+	cmp.b	d1,d2
+	bne	ins2
+		movea.l	a0,a2
+		movea.l	a1,a3
+	ins2_loop:
+		move.b	(a1)+,d1
+		beq	return_d0
+		cmp.b	(a0)+,d1
+		beq	ins2_loop
+		movea.l	a2,a0
+		movea.l	a3,a1
+ins2:
+	addq.w	#1,d0
+	bra	ins_loop
+
+
+
+
+midS:
+	move.l	par1+6(sp),a1
+	move.l	a1,a0
+	moveq	#-1,d1
+@@:
+	addq.w	#1,d1
+	tst.b	(a0)+
+	bne	@b
+
+	move.l	par2+6(sp),d0
+	bmi	return_nul_string		* 7/11/8
+	subq.w	#1,d0
+	blt	return_nul
+	beq	mid1
+	sub.w	d0,d1
+	bcc	@f
+	add.w	d1,d0
+	moveq	#0,d1
+@@:
+	add.w	d0,a1
+mid1:
+	move.l	par3+6(sp),d0
+	bmi	return_nul_string		* 7/11/8
+	sub.w	d0,d1
+	bcc	@f
+	add.w	d1,d0
+@@:
+	bra	rl共通
+
+
+rightS:
+	move.l	par1+6(sp),a1
+	move.l	a1,a0
+	moveq	#-1,d1
+@@:
+	addq.w	#1,d1
+	tst.b	(a0)+
+	bne	@b
+
+	move.l	par2+6(sp),d0
+	bmi	return_nul_string		* 7/11/8
+	sub.w	d0,d1
+	bcc	@f
+	add.w	d1,d0
+	moveq	#0,d1
+@@:
+	add.w	d1,a1
+	bra	rl共通
+
+
+leftS:
+	move.l	par1+6(sp),a1
+	move.l	par2+6(sp),d0
+	bmi	return_nul_string		* 7/11/8
+rl共通:
+	lea.l	tmp,a0
+	subq.w	#1,d0
+	bcs	lef_end
+@@:
+	move.b	(a1)+,(a0)+
+	dbra	d0,@b
+lef_end:
+	clr.b	(a0)
+	bra	return_buf
+
+return_nul_string:
+	lea.l	tmp,a0
+	clr.b	(a0)
+	bra	return_buf
+
+
+
+asc:
+	move.l	par1+6(sp),a0
+	moveq	#0,d0
+	move.b	(a0),d0
+	bra	return_d0
+len:
+	move.l	par1+6(sp),a0
+	moveq	#0,d0
+@@:
+	addq.w	#1,d0
+	tst.b	(a0)+
+	bne	@b
+	subq.w	#1,d0
+	bra	return_d0
+
+chrS:
+	move.l	par1+6(sp),d0
+	lea.l	tmp,a0
+	move.b	d0,(a0)+
+	clr.b	(a0)
+	bra	return_buf
+binS:
+	move.l	par1+6(sp),d0
+	lea.l	tmp,a0
+	FPACK	__BTOS
+	bra	return_buf
+octS:
+	move.l	par1+6(sp),d0
+	lea.l	tmp,a0
+	FPACK	__OTOS
+	bra	return_buf
+hexS:
+	move.l	par1+6(sp),d0
+	lea.l	tmp,a0
+	FPACK	__HTOS
+	bra	return_buf
+
+
+
+stringS:
+	movea.l	par2+6(sp),a0
+	move.b	(a0),d1
+	bra	ss共通
+
+tab:
+	moveq	#-1,d1
+	IOCS	_B_LOCATE
+	clr.w	d0
+	swap	d0		* 現在のX座標
+	move.w	par1+8(sp),d1
+	sub.w	d0,d1
+	bhi	@f
+	moveq	#0,d1
+@@:
+	move.w	d1,d0
+	moveq	#$20,d1
+	bra	sst共通
+
+spaceS:
+spc:
+	moveq	#$20,d1
+ss共通:
+	move.w	par1+8(sp),d0
+sst共通:
+	lea.l	tmp,a1
+	subq.w	#1,d0
+	bcs	return_nula1
+	cmpi.w	#$ff,d0
+	bcc	文字列長すぎ
+@@:
+	move.b	d1,(a1)+
+	dbra	d0,@b
+	clr.b	(a1)
+	bra	return_buf
+
+
+mirrorS:
+	move.l	par1+6(sp),a0
+	lea.l	tmp,a1
+	movea.l	a1,a2
+	moveq	#-1,d0
+@@:
+	addq.w	#1,d0
+	tst.b	(a0)+
+	bne	@b
+
+	subq.w	#1,d0
+	bcs	return_nula1
+	subq.l	#1,a0
+@@:
+	move.b	-(a0),(a2)+
+	dbra	d0,@b
+	clr.b	(a2)
+	bra	return_a1
+
+
+
+
+
+
+
+
+
+*-------------------
+atof:
+	move.l	par1+6(sp),a0
+	FPACK	__STOD		* d2,d3 は捨てていい？
+	bra	return_d0d1
+atoi:
+	move.l	par1+6(sp),a0
+	FPACK	__STOL
+	bra	return_d0
+
+ecvt:
+	movem.l	par1+2(sp),d0-d1
+	move.l	par2+6(sp),d2
+	lea.l	tmp,a0
+	FPACK	__ECVT
+	move.l	par3+6(sp),a1
+	move.l	d0,(a1)
+	move.l	par4+6(sp),a1
+	move.l	d1,(a1)
+	bra	return_buf
+fcvt:
+	movem.l	par1+2(sp),d0-d1
+	move.l	par2+6(sp),d2
+	lea.l	tmp,a0
+	FPACK	__FCVT
+	move.l	par3+6(sp),a1
+	move.l	d0,(a1)
+	move.l	par4+6(sp),a1
+	move.l	d1,(a1)
+	bra	return_buf
+
+gcvt:
+	movem.l	par1+2(sp),d0-d1
+	move.l	par2+6(sp),d2
+	lea.l	tmp,a0
+	FPACK	__GCVT
+	bra	return_buf
+
+itoa:
+	move.l	par1+6(sp),d0
+	lea.l	tmp,a0
+	FPACK	__LTOS
+	bra	return_buf
+
+strS:
+	movem.l	par1+2(sp),d0-d1
+	lea.l	tmp,a0
+	FPACK	__DTOS
+	bra	return_buf
+
+val:
+	move.l	par1+6(sp),a0
+	FPACK	__VAL
+	bra	return_d0d1
+
+
+*-------------------
+pi:
+	tst.w	par1(sp)
+	bmi	@f
+	movem.l	par1+2(sp),d0-d1
+	FPACK	__NPI
+	bra	return_d0d1
+@@:
+*	FPACK	__PI
+	move.l	#$400921fb,d0		* π
+	move.l	#$54442d18,d1
+	bra	return_d0d1
+
+
+abs:
+	movem.l	par1+2(sp),d0-d1
+	bclr	#$1f,d0
+	bra	return_d0d1
+fix:
+	movem.l	par1+2(sp),d0-d1
+	FPACK	__DFIX
+	bra	return_d0d1
+int:
+	movem.l	par1+2(sp),d0-d1
+	FPACK	__DFLOOR
+	bra	return_d0d1
+
+sgn:
+; __DSGN 展開 by Eriko 95/02/19
+; int i:randomize(0):for i=0 to 10000:abs(rnd()-0.5):next:end
+; 182 -> 169 (/100s@xvi24MHz-float2)
+; 68881/2 に命令があるならそっちの方が速いと思う...
+
+	move.l	(par1+2,sp),d0
+	bgt	sgn_pl			* +0～+∞
+
+	add.l	d0,d0
+	bne	sgn_minus_1		* -0 未満
+
+	move.l	(par1+2+4,sp),d1
+	beq	return_d0d1		* 返値:+0
+sgn_minus_1:
+	move.l	#$bff00000,d0
+	moveq	#0,d1			* 返値:-1
+	bra	return_d0d1
+
+sgn_pl:
+	bne	@f
+	move.l	(par1+2+4,sp),d1
+	beq	return_d0d1		* 返値:+0
+@@:
+	move.l	#$3ff00000,d0
+	moveq	#0,d1			* 返値:+1
+
+	bra	return_d0d1
+
+
+
+sin:
+	movem.l	par1+2(sp),d0-d1
+	FPACK	__SIN
+	bra	return_d0d1
+cos:
+	movem.l	par1+2(sp),d0-d1
+	FPACK	__COS
+	bra	return_d0d1
+tan:
+	movem.l	par1+2(sp),d0-d1
+	FPACK	__TAN
+	bra	return_d0d1
+atan:
+	movem.l	par1+2(sp),d0-d1
+	FPACK	__ATAN
+	bra	return_d0d1
+log:
+	movem.l	par1+2(sp),d0-d1
+	FPACK	__LOG
+	bra	return_d0d1
+exp:
+	movem.l	par1+2(sp),d0-d1
+	FPACK	__EXP
+	bra	return_d0d1
+pow:
+	movem.l	par1+2(sp),d0-d1
+	movem.l	par2+2(sp),d2-d3
+	FPACK	__POWER
+	bra	return_d0d1
+sqr:
+	movem.l	par1+2(sp),d0-d1
+	tst.l	d0
+	bge	@f
+	add.l	d0,d0
+	bne	irregular_param
+@@:
+	FPACK	__SQR
+	bra	return_d0d1
+
+
+randomize:
+	move.l	par1+6(sp),d0
+	FPACK	__RANDOMIZE
+	bra	return_zero
+srand:
+	move.l	par1+6(sp),d0
+	FPACK	__SRAND
+	bra	return_zero
+
+rnd:
+	FPACK	__RND
+	bra	return_d0d1
+rand:
+	FPACK	__RAND
+	bra	return_d0
+
+
+*-------------------
+return_d1d2:			* ＦＬＯＡＴ型を返す
+	lea.l	fac(pc),a0
+	movem.l	d1-d2,2(a0)
+	moveq.l	#0,d0
+	rts
+
+return_d0d1:			* ＦＬＯＡＴ型を返す
+	lea.l	fac(pc),a0
+	movem.l	d0-d1,2(a0)
+	moveq.l	#0,d0
+	rts
+
+return_zero:
+	moveq.l	#0,d0
+	lea.l	fac(pc),a0
+	move.l	d0,6(a0)
+	rts
+
+
+file_end:
+	tst.l	d0
+	bge	return_d0
+return_minus:
+	moveq	#-1,d0
+return_d0:
+	lea.l	fac(pc),a0
+	move.l	d0,6(a0)
+	moveq.l	#0,d0
+	rts
+
+return_buf:
+	lea.l	tmp,a1
+return_a1:
+	lea.l	fac(pc),a0
+	move.l	a1,6(a0)
+	moveq.l	#0,d0
+	rts
+
+return_nul:
+	lea.l	tmp,a1
+return_nula1:
+	clr.b	(a1)
+	lea.l	fac(pc),a0
+	move.l	a1,6(a0)
+	moveq.l	#0,d0
+	rts
+
+*-----------------------------
+
+	.even
+fac:
+	.dc.w	0
+	.dc.l	0
+	.dc.l	0
+
+*-----------------------------
+
+ * 外部関数エラー
+
+irregular_param:
+	lea.l	_irregular_param(pc),a1
+	moveq	#4,d0
+	bra	1f
+openmode_err:
+	lea.l	_openmode_err(pc),a1
+	moveq	#1,d0
+	bra	1f
+無効な要素数:
+	lea.l	_無効な要素数(pc),a1
+	moveq	#6,d0
+	bra	1f
+文字列長すぎ:
+	lea.l	_文字列長すぎ(pc),a1
+	moveq	#1,d0
+	bra	1f
+doscall_err:
+	lea.l	doscall_err_mes(pc),a1
+	move.w	d0,d1
+	not.w	d1
+	subq.w	#1,d1
+	bcs	1f		* んなはずないが
+	cmpi.w	#23,d1
+	bhi	1f		* 謎の DOS call error
+@@:
+	tst.b	(a1)+
+	bne	@b
+	dbra	d1,@b
+1:
+	lea.l	fac(pc),a0
+	moveq	#-1,d1		* error off の時の返り値
+	move.l	d1,6(a0)
+	rts
+
+_irregular_param:
+	.dc.b	'引き数の範囲が不正です',0
+_openmode_err:
+	.dc.b	'オープンモードの指定に誤りがあります',0
+_無効な要素数:
+	.dc.b	'無効な要素数を指定しました',0
+_文字列長すぎ:
+	.dc.b	'文字列が長すぎます',0
+doscall_err_mes:
+	.dc.b	0
+	.dc.b	'指定したファイルは見つかりません',0
+	.dc.b	'指定したディレクトリは見つかりません',0
+	.dc.b	'オープンしているファイルが多すぎます',0
+	.dc.b	'ディレクトリやボリュームラベルはアクセスできません',0
+	.dc.b	'指定したハンドルはオープンされていません',0
+	.dc.b	'メモリ管理領域がこわされました',0
+	.dc.b	'実行するのに必要なメモリがありません',0
+	.dc.b	'無効なメモリ管理ポインタを指定しました',0
+	.dc.b	'不正な環境を指定しました',0
+	.dc.b	'実行ファイルのフォーマットが異常です',0
+	.dc.b	'オープンでアクセスモードが異常です',0		/* ???
+	.dc.b	'ファイル名の指定に誤りがあります',0
+	.dc.b	'無効なパラメータでコールしました',0
+	.dc.b	'ドライブ指定に誤りがあります',0
+	.dc.b	'カレントディレクトリは削除できません',0
+	.dc.b	0
+	.dc.b	0
+	.dc.b	'このファイルは書き込みができません',0
+	.dc.b	'このディレクトリはすでに登録されています',0	/* ???
+	.dc.b	'ファイルがあるので削除できません',0
+	.dc.b	'ファイルがあるのでリネームできません',0
+	.dc.b	'ディスクがいっぱいでファイルが作れません',0
+	.dc.b	'ディレクトリがいっぱいでファイルが作れません',0
+	.dc.b	'指定の位置にはシークできません',0
+	.even
+
+
+	.end
+
