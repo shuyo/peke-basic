@@ -440,7 +440,7 @@ str_point:
 	bsr	int値get
 	movea.l	Astr(a4),a0
 2:
-	cmpi.w	#$100,d0
+	cmpi.l	#$100,d0
 	bcc	str_access_err
 	move.l	d1,-(sp)
 	move.w	(a5)+,d1
@@ -643,7 +643,7 @@ str_point2:
 	movea.l	Astr(a4),a0
 2:
 	move.l	d1,-(sp)
-	cmpi.w	#$100,d0
+	cmpi.l	#$100,d0
 	bcc	str_access_err
 	move.w	(a5)+,d1
 	lsl.w	#8,d1
@@ -1941,7 +1941,7 @@ key_err:
 Str:
 	bsr	int値get	* 代入ポインタ
 	move.l	d0,d1
-	cmpi.w	#$100,d1
+	cmpi.l	#$100,d1
 	bcc	str_access_err
 	bsr	int値get	* ほんとは char だけど
 	move.w	(a5)+,d2	* str変数番号
