@@ -2657,6 +2657,9 @@ us_str:
 	cmpi.b	#'&',-1(a2)
 	bne	using_format_err
 us_str0:
+	move.w	d0,-(sp)
+	bsr	first_check_a5_in_line	* 区切り記号の前の空白を許容
+	move.w	(sp)+,d0
 	cmp.b	(a5)+,d2
 	bne	using_format_err0
 	move.w	#UsingStr,(a4)+		* 中間言語書き込み = 8
@@ -2666,6 +2669,7 @@ us_str0:
 	bra	us_loop
 
 us_str_all:
+	bsr	first_check_a5_in_line	* 区切り記号の前の空白を許容
 	cmp.b	(a5)+,d2
 	bne	using_format_err0
 	move.w	#$8001,(a4)+		* str型の意
@@ -2715,6 +2719,9 @@ us_num1:
 us_num0:
 	move.w	#UsingNum,(a4)+		* 中間言語書き込み = 6
 
+	move.w	d0,-(sp)
+	bsr	first_check_a5_in_line	* 区切り記号の前の空白を許容
+	move.w	(sp)+,d0
 	cmp.b	(a5)+,d2
 	bne	using_format_err0
 
