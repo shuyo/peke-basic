@@ -1422,6 +1422,19 @@ auto変数リスト作成:
  *	$0003 = if
  *	$0004 = switch(str)
  *	$0014 = switch(str) (default の後)
+ * nest_work があふれていないかチェック (a3 = 現在の書込位置)
+ * 後続の固定書き込みのため $10 のマージンを見る
+nest確保check:
+	move.l	d1,-(sp)
+	move.l	a3,d1
+	addi.l	#$10,d1
+	cmp.l	program_area,d1
+	bhi	nest_over_err
+	move.l	(sp)+,d1
+	rts
+nest_over_err:
+	ERROR	87
+
 nest登録:
  *	a3 = 書き込みアドレス
 	movea.l	nest_work,a3
@@ -1434,6 +1447,7 @@ nest登録:
 	addq.l	#4,a3		* つぎ
 	move.l	d0,(a3)+	* まえ
 	move.w	d2,(a3)+	* 種類
+	bsr	nest確保check
 	rts
 
  * nest 
@@ -1518,6 +1532,7 @@ Case:
 
 	movea.l	nest_work,a0	* ネストものの終わりの決まり文句
 	move.l	a3,(a0)
+	bsr	nest確保check
 	rts
 
  * 文字列用
@@ -1541,6 +1556,7 @@ Case2:
 2:
 	clr.b	(a3)+		* 文字列終
 	clr.b	(a3)+
+	bsr	nest確保check	* 文字列コピー後の事後検査
 	move.l	a3,d0
 	bclr	#0,d0
 	move.l	(sp)+,a3
@@ -1573,6 +1589,7 @@ Default:
 	move.l	d0,(a3)+	* default address
 
 	move.l	a3,(a0)		* ネストバッファの終端を登録
+	bsr	nest確保check
 
 	rts
 
@@ -1701,6 +1718,7 @@ Break:
 	movea.l	d0,a3
 	move.l	a4,(a3)+
 	move.l	a3,(a0)
+	bsr	nest確保check
 	addq.l	#4,a4
 	rts
 
@@ -1723,6 +1741,7 @@ Continue:
 	neg.l	d0
 	move.l	d0,(a3)+
 	move.l	a3,(a0)
+	bsr	nest確保check
 	addq.l	#4,a4
 	rts
 
@@ -1923,6 +1942,11 @@ While:
 	bsr	math解釈
  *	return  d6.w	= 変数の型(d2=ffff 以外なら d2.l を保存）
 	move.l	(sp)+,a3
+	move.l	a3,d1
+	add.l	d0,d1		* 条件式の中間言語が nest_work に収まったか
+	addi.l	#$10,d1
+	cmp.l	program_area,d1
+	bhi	nest_over_err
 
 	lsr.w	#1,d0
 	subq.w	#1,d0
@@ -2038,6 +2062,11 @@ for_1:
 	bsr	math解釈
  *	return  d6.w	= 変数の型(d2=ffff 以外なら d2.l を保存）
 	move.l	(sp)+,a3
+	move.l	a3,d1
+	add.l	d0,d1		* 条件式の中間言語が nest_work に収まったか
+	addi.l	#$10,d1
+	cmp.l	program_area,d1
+	bhi	nest_over_err
 
 	cmpi.w	#$8000,(a4)	* int 定数
 	beq	next2
