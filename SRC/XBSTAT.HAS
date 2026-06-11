@@ -1112,6 +1112,7 @@ func_loop:
 	bne	@f
 
 	addq.l	#1,a5
+	bsr	first_check_a5_in_line
 	bsr	hash		* •Ï”‚ÌŒ^‚¾‚ªA–³‹
 @@:
 	movea.l	(sp)+,a2
