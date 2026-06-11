@@ -2117,6 +2117,7 @@ fnc_1
 	swap	d2		* 下位＝配列番号
 	move.l	d2,(a3)+
 	addq.w	#4,d1
+	move.b	d0,d2		* 負 = auto 配列（添字検査スキップ用）
 
 
 	move.w	(a2)+,d4	* 添字指定フラグ
@@ -2124,6 +2125,8 @@ fnc_1
 1:
 	add.w	d4,d4
 	bcc	@f
+	tst.b	d2		* auto 配列は添字0で登録されており大きさ不明のため検査しない
+	bmi	@f
 	move.w	(a2),d0		* 添字指定の大きさ（あれば）
 	cmp.w	(a0),d0
 	bne	dim_soeji	* 添字が合わない
