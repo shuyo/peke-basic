@@ -3,3 +3,9 @@
 *.H -text
 *.R -text
 *.FNC -text
+*.CNF -text
+*.BAT -text
+*.BFD -text
+*.PAL -text
+*.SP -text
+*.LZH -text
