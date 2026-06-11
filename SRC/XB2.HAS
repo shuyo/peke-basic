@@ -971,8 +971,7 @@ Date:
 	lsl.l	#4,d1
 	ori.b	#$02,d1		* yy/mm/dd
 	ror.l	#4,d1
-	movea.l	strbuf,a0
-	addi.l	#$100,strbuf
+	bsr	strbuf確保
 	move.l	a1,-(sp)
 	movea.l	a0,a1
 	IOCS	_DATEASC
@@ -985,8 +984,7 @@ Day:
 	lsr.w	#8,d0
 	moveq	#0,d1
 	move.b	d0,d1		* 曜日
-	movea.l	strbuf,a0
-	addi.l	#$100,strbuf
+	bsr	strbuf確保
 	move.l	a1,-(sp)
 	movea.l	a0,a1
 	IOCS	_DAYASC
@@ -998,8 +996,7 @@ Time:
 	move.l	d0,d1		* BCD
 	IOCS	_TIMEBIN
 	move.l	d0,d1		* binary
-	movea.l	strbuf,a0
-	addi.l	#$100,strbuf
+	bsr	strbuf確保
 	move.l	a1,-(sp)
 	movea.l	a0,a1
 	IOCS	_TIMEASC
@@ -1016,8 +1013,7 @@ Inkey0:
 	DOS	_KEYCTRL
 	addq.l	#2,sp
 @@:
-	movea.l	strbuf,a0
-	addi.l	#$100,strbuf
+	bsr	strbuf確保
 	clr.w	(a0)
 	move.b	d0,(a0)
 	rts
@@ -1032,8 +1028,7 @@ Inkey:
 	tst.b	d0	* 一部のFEPにバグがあるらしい（ 島崎さん )
 	beq	@b
 
-	movea.l	strbuf,a0
-	addi.l	#$100,strbuf
+	bsr	strbuf確保
 	clr.w	(a0)
 	move.b	d0,(a0)
 
@@ -1079,8 +1074,7 @@ sg1:
 	tst.w	(a0)
 	bne	返り値がない
 	movea.l	2+4(a0),a1
-	movea.l	strbuf,a0
-	addi.l	#$100,strbuf
+	bsr	strbuf確保
 	move.l	a0,d2		* 保存
 @@:
 	move.b	(a1)+,(a0)+
@@ -1102,13 +1096,23 @@ str_imm:
 	rts
 
 
+ * 文字列中間バッファを 1 スロット ($100) 確保して a0 に返す
+ * 領域 (strbufSIZE = 32 スロット) を使い切ったらエラー
+strbuf確保:
+	movea.l	strbuf,a0
+	cmpa.l	nest_work,a0
+	bcc	@f
+	addi.l	#$100,strbuf
+	rts
+@@:
+	IERROR	86
+
 str_cal:
 	move.w	(a5)+,d0
 	cmpi.w	#5*2,d0		* '+'
 	bne	strに足し算以外
 
-	movea.l	strbuf,a0
-	addi.l	#$100,strbuf
+	bsr	strbuf確保
 
 	movem.l	a0/a1,-(sp)
 	move.w	#255-1,d1

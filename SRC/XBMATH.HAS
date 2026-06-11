@@ -1063,6 +1063,39 @@ __float
 
 
 
+ * 解釈ワークエリア (1KB) の使用量チェック（式の継続時に呼ぶ）
+ * 次の項・演算子を書く余裕がなければエラー
+解釈work検査:
+	move.l	d0,-(sp)
+	move.l	(a4),d0		* 式を並べるポインタ
+	sub.l	a4,d0
+	cmpi.w	#$100-8,d0
+	bcc	式complex_err
+	move.l	4(a4),d0	* 項のアドレスを並べるポインタ (32項まで)
+	sub.l	a4,d0
+	cmpi.w	#$200,d0
+	bcc	式complex_err
+	move.l	8(a4),d0	* 項を並べるポインタ
+	sub.l	a4,d0
+	cmpi.w	#$400,d0
+	bcc	式complex_err
+	move.l	(sp)+,d0
+	rts
+
+ * 式終了時: 項データのあふれだけ事後検査（長い文字列定数対策）
+解釈work検査2:
+	move.l	d0,-(sp)
+	move.l	8(a4),d0
+	sub.l	a4,d0
+	cmpi.w	#$400,d0
+	bhi	式complex_err
+	move.l	(sp)+,d0
+	rts
+
+式complex_err:
+	ERROR	86
+
+
 演算子チェック:
 
  * 演算子チェック
@@ -1075,6 +1108,7 @@ __float
 	cmpi.w	#$0f10,d0		* 'not'
 	beq	式err
 
+	bsr	解釈work検査
 	movea.l	(a4),a0
 	move.w	d0,(a0)+	* siki
 	move.l	a0,(a4)
@@ -1093,6 +1127,7 @@ __float
 
 
 並べ替え:
+	bsr	解釈work検査2
 	movea.l	(a4),a1
 	move.l	a1,d4
 	sub.l	a4,d4
