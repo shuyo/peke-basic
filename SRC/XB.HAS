@@ -1931,11 +1931,11 @@ incl_展開:
 	move.w	d2,-(sp)
 	DOS	_READ
 	lea.l	10(sp),sp
+	cmp.l	d3,d0		* READ の結果を CLOSE の前に検査（d0 が潰れる）
+	bne	incl_err開けない
 	move.w	d2,-(sp)
 	DOS	_CLOSE
 	addq.l	#2,sp
-	cmp.l	d3,d0
-	bne	incl_err開けない
  * 末尾マーカー "\n/*#end\x01\n"
 	lea.l	(a1,d3.l),a2
 	lea.l	incl_endmark(pc),a3
