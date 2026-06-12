@@ -1302,29 +1302,29 @@ auto変数リスト作成:
 	bsr	buf書込		* dummy
 
 	move.w	4+8*0(a2),d0		* intの型の変数の個数 - 1
-	moveq	#0,d1		* 変数領域サイズは32bitで集計 (GH#2)
-	move.w	d0,d1
-	addq.l	#1,d1
+	move.w	d0,d1		* 変数領域サイズは32bitで集計 (GH#2)
+	addq.w	#1,d1		* 個数-1 が -1 (空) のときワードで 0 になる
+	ext.l	d1
 	lsl.l	#2,d1
 	add.l	d1,d5
 	bsr	buf書込
 	move.w	4+8*1(a2),d0		* str
-	moveq	#0,d1
 	move.w	d0,d1
-	addq.l	#1,d1
+	addq.w	#1,d1
+	ext.l	d1
 	lsl.l	#8,d1
 	add.l	d1,d5
 	bsr	buf書込
 	move.w	4+8*2(a2),d0		* char
-	moveq	#0,d1
 	move.w	d0,d1
-	addq.l	#1,d1
+	addq.w	#1,d1
+	ext.l	d1
 	add.l	d1,d5
 	bsr	buf書込
 	move.w	4+8*3(a2),d0		* float
-	moveq	#0,d1
 	move.w	d0,d1
-	addq.l	#1,d1
+	addq.w	#1,d1
+	ext.l	d1
 	lsl.l	#3,d1
 	add.l	d1,d5
 	bsr	buf書込
