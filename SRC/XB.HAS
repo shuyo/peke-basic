@@ -1807,7 +1807,7 @@ incl_次の行:
 
 incl_展開:
 	addq.w	#1,incl個数
-	cmpi.w	#16,incl個数
+	cmpi.w	#64,incl個数
 	bhi	incl_err多すぎ
  * ファイル名を $100+tmp へ取り出す
 	lea.l	10(a0),a1
@@ -2021,7 +2021,7 @@ incl行変換:
 	tst.w	incl個数
 	beq	incl_rts
 	movem.l	d2/d4/a4,-(sp)
-	lea.l	-8*17(sp),sp
+	lea.l	-8*65(sp),sp
 	movea.l	sp,a4		* 入れ子用スタック枠
 	moveq	#0,d2		* 深さ
 	moveq	#0,d0		* 現在のファイルの消費済み行数
@@ -2091,7 +2091,7 @@ incl変換hit:
 @@:
 	clr.b	(a1)
 incl変換end:
-	lea.l	8*17(sp),sp
+	lea.l	8*65(sp),sp
 	movem.l	(sp)+,d2/d4/a4
 	rts
 
