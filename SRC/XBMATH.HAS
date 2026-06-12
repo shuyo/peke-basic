@@ -1768,6 +1768,7 @@ Sxor:
 	tst.w	d0
 	bge	ˆê€’è”
 @@:
+	move.b	#$ff,(sp)	* ô‚Ü‚È‚¢’è”(float“™)‚Í’è”ƒ}[ƒN‚ğÁ‚·
 	cmpi.w	#$0f,d2		* not
 	beq	ˆê€not
 ˆê€minus:
