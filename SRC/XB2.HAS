@@ -253,8 +253,9 @@ float_set:
 
 str_set:
 	movea.l	変数str,a1		* とりあえず兼用
-	lsl.w	#8,d2
-	lea.l	(a1,d2.w),a1
+	ext.l	d2		* str変数128個以上でワードが符号反転するので32bit計算 (GH#2)
+	lsl.l	#8,d2
+	lea.l	(a1,d2.l),a1
 @@:
 	move.b	(a0)+,(a1)+
 	bne	@b
@@ -297,8 +298,9 @@ float_setA:
 
 str_setA:
 	movea.l	Astr(a4),a1
-	lsl.w	#8,d2
-	lea.l	(a1,d2.w),a1
+	ext.l	d2
+	lsl.l	#8,d2
+	lea.l	(a1,d2.l),a1
 @@:
 	move.b	(a0)+,(a1)+
 	bne	@b
@@ -444,9 +446,10 @@ str_point:
 	bcc	str_access_err
 	move.l	d1,-(sp)
 	move.w	(a5)+,d1
-	lsl.w	#8,d1
-	add.w	d0,d1
-	move.b	(a0,d1.w),d0
+	ext.l	d1
+	lsl.l	#8,d1
+	add.l	d0,d1
+	move.b	(a0,d1.l),d0
 
 	move.l	(sp)+,d1
 	bra	4f
@@ -646,9 +649,10 @@ str_point2:
 	cmpi.l	#$100,d0
 	bcc	str_access_err
 	move.w	(a5)+,d1
-	lsl.w	#8,d1
-	add.w	d0,d1
-	move.b	(a0,d1.w),d0
+	ext.l	d1
+	lsl.l	#8,d1
+	add.l	d0,d1
+	move.b	(a0,d1.l),d0
 
 	move.l	(sp)+,d1
 	bra	4f
@@ -1040,14 +1044,16 @@ Inkey:
 
 normal_str_var:
 	movea.l	変数str,a0		* とりあえず兼用
-	lsl.w	#8,d0
-	lea.l	(a0,d0.w),a0
+	ext.l	d0
+	lsl.l	#8,d0
+	lea.l	(a0,d0.l),a0
 	rts
 auto_str_var:
 	move.w	(a5)+,d0
 	movea.l	Astr(a4),a0
-	lsl.w	#8,d0
-	lea.l	(a0,d0.w),a0
+	ext.l	d0
+	lsl.l	#8,d0
+	lea.l	(a0,d0.l),a0
 	rts
 
 
@@ -1962,11 +1968,12 @@ Str:
 1:
 	movea.l	変数str,a0		* とりあえず兼用
 2:
-	lsl.w	#8,d2
-	add.w	d1,d2
-	tst.b	(a0,d2.w)
+	ext.l	d2
+	lsl.l	#8,d2
+	add.l	d1,d2
+	tst.b	(a0,d2.l)
 *	beq	@f
-	move.b	d0,(a0,d2.w)
+	move.b	d0,(a0,d2.l)
 	bra	main_loop
 *@@:
 *	move.b	d0,(a0,d2.w)
@@ -2641,8 +2648,9 @@ Inp_str:
 	not.w	d2
 	movea.l	Astr(a4),a2
 2:
-	lsl.w	#8,d2
-	lea.l	(a2,d2.w),a2
+	ext.l	d2
+	lsl.l	#8,d2
+	lea.l	(a2,d2.l),a2
 
 	tst.b	(a0)
 	beq	Inp_loop
@@ -2798,8 +2806,9 @@ linput_Astr:
 	not.w	d2
 	movea.l	Astr(a4),a1
 @@:
-	lsl.w	#8,d2
-	lea.l	(a1,d2.w),a1
+	ext.l	d2
+	lsl.l	#8,d2
+	lea.l	(a1,d2.l),a1
 
 @@:
 	move.b	(a0)+,(a1)+
@@ -3431,8 +3440,9 @@ Variable_clr_sub:
 		move.l	a1,(a2)
 		move.w	(a0)+,d0	* str
 		addq.w	#1,d0
-		lsl.w	#8,d0		* 128 個までしかできないけど大丈夫？
-		adda.w	d0,a1
+		ext.l	d0
+		lsl.l	#8,d0		* 128 個以上も大丈夫になった (GH#2)
+		adda.l	d0,a1
 
 		movea.l	Fchar(sp),a2
 		move.l	a1,(a2)
@@ -3463,8 +3473,9 @@ Variable_clr_sub:
 		move.l	a1,(a2)
 		move.w	(a0)+,d0	* str
 		addq.w	#1,d0
-		lsl.w	#8-2,d0
-		bsr	a1_clr_d0x4
+		ext.l	d0
+		lsl.l	#8-2,d0
+		bsr	a1_clr_d0Lx4
 
 		movea.l	Fchar(sp),a2
 		move.l	a1,(a2)
@@ -3569,9 +3580,10 @@ Variable_clr_sub:
 
 str引数:
 	movea.l	Fstr(sp),a2
-	lsl.w	#8,d2
+	ext.l	d2
+	lsl.l	#8,d2
 	movea.l	(a2),a2
-	lea.l	(a2,d2.w),a2
+	lea.l	(a2,d2.l),a2
 	move.l	a0,-(sp)
 	movea.l	6(a1),a0
 @@:
