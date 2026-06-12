@@ -82,6 +82,9 @@ _ed_filename:	.ds.b	$100
 _strtok_work:	.ds.w	1
 _strtok_buf:	.ds.b	$100
 		.ds.b	$100
+_incl個数:	.ds.w	1	* include したファイル数 (GH#16)
+_inclerr名:	.ds.b	$60	* include エラー表示用ファイル名
+		.even
 _SP上限:	.ds.b	$8000
 _WORK:
 
@@ -155,6 +158,8 @@ ed_filename	reg	_ed_filename(a6)
  * 標準関数用
 strtok_work	reg	_strtok_work(a6)
 strtok_buf	reg	_strtok_buf(a6)
+incl個数	reg	_incl個数(a6)
+inclerr名	reg	_inclerr名(a6)
 
 
 
