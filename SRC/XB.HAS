@@ -1911,12 +1911,12 @@ incl_展開:
 	bne	@b
 	subq.l	#1,a2		* a2 = NUL の位置
  * メモリチェック（新しい末尾 + 余裕 $100）
-	lea.l	8(a2,d3.l),a3	* 移動先の末尾（マーカー8バイト分含む）
+	lea.l	9(a2,d3.l),a3	* 移動先の末尾（マーカー9バイト分含む）
 	move.l	a3,d0
 	addi.l	#$100,d0
 	cmp.l	mem_last,d0
 	bcc	mem_err
- * 後ろへずらす（[a1..a2] を size+8 だけ後ろへ、NUL 含む）
+ * 後ろへずらす（[a1..a2] を size+9 だけ後ろへ、NUL 含む）
 	move.l	a2,d0
 	sub.l	a1,d0
 @@:
@@ -1936,10 +1936,10 @@ incl_展開:
 	addq.l	#2,sp
 	cmp.l	d3,d0
 	bne	incl_err開けない
- * 末尾マーカー "\n/*#end\n"
+ * 末尾マーカー "\n/*#end\x01\n"
 	lea.l	(a1,d3.l),a2
 	lea.l	incl_endmark(pc),a3
-	moveq	#8-1,d0
+	moveq	#9-1,d0
 @@:
 	move.b	(a3)+,(a2)+
 	dbra	d0,@b
@@ -1999,7 +1999,7 @@ incl_directive判定:
 incl_endmark判定:
 	movem.l	d0-d1/a0-a1,-(sp)
 	lea.l	incl_endmark+1(pc),a1
-	moveq	#7-1,d1
+	moveq	#8-1,d1
 @@:
 	move.b	(a0)+,d0
 	cmp.b	(a1)+,d0
@@ -2046,7 +2046,7 @@ incl変換loop:
 	bsr	incl_endmark判定
 	bne	1f
 	tst.w	d2
-	beq	2f		* 対応しない end は無視
+	beq	1f		* 対応しない end は普通の行として数える
 	subq.w	#1,d2
 	movea.l	-(a4),a2
 	move.l	-(a4),d0
@@ -2097,7 +2097,7 @@ incl変換end:
 incl_key:
 	.dc.b	'/*#include'
 incl_endmark:
-	.dc.b	$0a,'/*#end',$0a
+	.dc.b	$0a,'/*#end',$01,$0a	* $01 入りなのでユーザーのソースと衝突しない
 incl_no:
 	.dc.b	' の ',0
 	.even
