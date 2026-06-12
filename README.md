@@ -1,4 +1,4 @@
-# ぺけ-BASIC (XB) ver.0.02
+# ぺけ-BASIC (XB)
 
 Sharp X68000 用 BASIC インタープリタ
 
@@ -67,11 +67,11 @@ XB [オプション] [プログラムファイル]
 
 | オプション | 説明 |
 |---|---|
-| `-w` | 警告を抑制 |
-| `-e エディタ` | 使用するエディタを指定 |
-| `-f 設定ファイル` | 設定ファイルを指定（省略時 `XB.CNF`） |
+|`-f`<数字> | フリーエリアの大きさの指定 ( Kb 単位 ) |
+|`-c`<名前> | コンフィグファイル名の指定（省略時 `XB.CNF`） |
+|`-e`<文字> | 拡張機能の ON/OFF (ACDEIL) |
 
-詳細は [`DOCS/XB.DOC.txt`](DOCS/XB.DOC.txt) を参照してください。
+詳細は [`DOCS/XB.DOC.txt`](DOCS/XB.DOC.txt) の「2.3 コンフィグファイル」を参照してください。
 
 ## バージョン履歴
 
@@ -91,4 +91,4 @@ XB [オプション] [プログラムファイル]
 
 [MIT License](LICENSE)
 
-Copyright (c) 1994-1997 Nakatani Shuyo
+Copyright (c) 1994-2026 Nakatani Shuyo
