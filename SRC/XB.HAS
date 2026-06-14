@@ -1263,14 +1263,16 @@ error_sub:
 
 	pea.l	tenten(pc)
 	DOS	_PRINT
+	lea.l	basic_filename,a2	* 本体エラーでもファイル名を表示 (GH#16)
 	tst.b	inclerr名
 	beq	@f
-	pea.l	inclerr名
+	lea.l	inclerr名,a2		* include 内なら include ファイル名
+@@:
+	move.l	a2,-(sp)		* ファイル名
 	DOS	_PRINT
-	pea.l	incl_no(pc)
+	pea.l	incl_no(pc)		* " の "
 	DOS	_PRINT
 	addq.l	#8,sp
-@@:
 	move.l	d1,(sp)		* 行数表示
 	bsr	dec_print
 	pea.l	gyou(pc)
